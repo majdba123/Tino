@@ -50,4 +50,34 @@ class User extends Authenticatable
     ];
 
 
+    public function User_Subscription()
+    {
+        return $this->hasMany(User_Subscription::class);
+    }
+
+
+    public function clinic()
+    {
+        return $this->hasOne(Clinic::class);
+    }
+
+
+
+    public function pets()
+    {
+        return $this->hasMany(Pet::class);
+    }
+
+    public function discountCoupons()
+    {
+        return $this->hasMany(DiscountCoupon::class);
+    }
+
+    public function medicalRecords()
+    {
+        return $this->morphMany(MedicalRecord::class, 'recordable');
+    }
+
+
+
 }

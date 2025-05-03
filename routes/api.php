@@ -1,11 +1,18 @@
 <?php
 
+use App\Http\Controllers\ClinicController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Registration\RegisterController;
 use App\Http\Controllers\Registration\LoginController;
 use App\Http\Controllers\Registration\GoogleAuthController;
 use App\Http\Controllers\Registration\FacebookController;
+use App\Http\Controllers\SubscriptionController;
+use App\Http\Controllers\UserSubscriptionController;
+use App\Http\Controllers\DiscountCouponController;
+use App\Http\Controllers\MedicalRecordController;
+use App\Http\Controllers\PetController;
+
 
 /*
 |--------------------------------------------------------------------------
@@ -48,6 +55,63 @@ Route::group(['middleware' => ['web']], function () {
 
 
 Route::middleware(['auth:sanctum', 'admin'])->group(function () {
+    Route::prefix('admin')->group(function () {
+        Route::prefix('subscriptions')->group(function () {
+            Route::get('fillter/', [SubscriptionController::class, 'index']);
+            Route::get('get_all_user_subscriped/', [SubscriptionController::class, 'get_all_user_subscriped']);
+            Route::get('get_subscripe_of_user/{user_id}', [UserSubscriptionController::class, 'activeSubscription']);
+            Route::get('show/{id}', [SubscriptionController::class, 'show']);
+            Route::post('store/', [SubscriptionController::class, 'store']);
+            Route::put('update/{id}', [SubscriptionController::class, 'update']);
+            Route::delete('delete/{id}', [SubscriptionController::class, 'destroy']);
+            Route::post('active/{id}/', [SubscriptionController::class, 'activate']);
+            Route::post('deactive/{id}/', [SubscriptionController::class, 'deactivate']);
+        });
+
+
+        Route::prefix('clinics')->group(function () {
+            Route::post('/store', [ClinicController::class, 'store']);
+            Route::put('/update/{id}', [ClinicController::class, 'update']); // PUT أو PATCH
+            Route::get('fillter', [ClinicController::class, 'filter']);
+            Route::get('show/{clinic_id}', [ClinicController::class, 'show']);
+            Route::delete('/delete/{clinic_id}', [ClinicController::class, 'destroy']);
+
+        });
+
+    });
+
+
+});
+
+
+
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::prefix('user')->group(function () {
+        Route::prefix('subscriptions')->group(function () {
+            Route::get('fillter/', [SubscriptionController::class, 'index']);
+            Route::get('show/{id}', [SubscriptionController::class, 'show']);
+
+            Route::post('subscribe/', [UserSubscriptionController::class, 'subscribe']);
+            Route::get('get_my_all', [UserSubscriptionController::class, 'get_my_all']);
+
+        });
+
+        Route::post('pets/store', [PetController::class, 'store']);
+        Route::get('pets/get_all', [PetController::class, 'index']);
+        Route::post('/medical-records/store', [MedicalRecordController::class, 'store']);
+        Route::get('discount-coupons/get_all', [DiscountCouponController::class, 'index']);
+
+
+
+
+
+
+
+
+
+
+
+    });
 
 
 });
