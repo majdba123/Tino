@@ -38,4 +38,10 @@ class Pet extends Model
     {
         return $this->birth_date ? $this->birth_date->diffInYears(now()) : null;
     }
+
+    // أضف هذه العلاقة إلى نموذج User
+    public function consultations()
+    {
+        return $this->hasMany(Consultation::class);
+    }
 }

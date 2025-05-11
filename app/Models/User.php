@@ -78,6 +78,12 @@ class User extends Authenticatable
         return $this->morphMany(MedicalRecord::class, 'recordable');
     }
 
+    // أضف هذه العلاقة إلى نموذج User
+    public function consultations()
+    {
+        return $this->hasMany(Consultation::class);
+    }
+
 
 
 }

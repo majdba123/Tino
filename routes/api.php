@@ -12,6 +12,7 @@ use App\Http\Controllers\UserSubscriptionController;
 use App\Http\Controllers\DiscountCouponController;
 use App\Http\Controllers\MedicalRecordController;
 use App\Http\Controllers\PetController;
+use App\Http\Controllers\ConsultationController;
 
 
 /*
@@ -78,6 +79,14 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
 
         });
 
+
+        Route::prefix('consultations')->group(function () {
+            Route::get('get_all/', [ConsultationController::class, 'index']);
+            Route::get('/show/{id}', [ConsultationController::class, 'show']);
+            Route::post('/change_operation/{id}', [ConsultationController::class, 'change_operation']);
+
+            });
+
     });
 
 
@@ -102,6 +111,13 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('discount-coupons/get_all', [DiscountCouponController::class, 'index']);
 
 
+
+        Route::prefix('consultations')->group(function () {
+        Route::post('store/', [ConsultationController::class, 'store']);
+        Route::get('get_all/', [ConsultationController::class, 'index']);
+        Route::get('/show/{id}', [ConsultationController::class, 'show']);
+
+        });
 
 
 
