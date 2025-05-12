@@ -16,6 +16,9 @@ class DatabaseSeeder extends Seeder
         $this->call(SubscriptionSeeder::class);
         $this->call(PetsTableSeeder::class);
         $this->call(UserSubscriptionSeeder::class);
+        $this->call(ClinicSeeder::class);
+        $this->call(ConsultationSeeder::class);
+
 
 
 

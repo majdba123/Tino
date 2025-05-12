@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\Anwer_Cons;
 use App\Models\Clinic;
 use App\Models\Consultation;
+use App\Models\Order_Clinic;
 use App\Models\Pet;
 use App\Models\UserSubscription;
 use Illuminate\Http\Request;
@@ -57,7 +59,7 @@ class ConsultationController extends Controller
         $user_id = $request->query('user_id');
 
         // بناء الاستعلام الأساسي
-        $query = Consultation::query()->with('pet')->latest(); // الترتيب حسب الأحدث (حقل created_at)
+        $query = Consultation::query()->with('pet','anwer_cons')->latest(); // الترتيب حسب الأحدث (حقل created_at)
 
         // إذا لم يكن المستخدم مدير (admin)، نضيف شرط user_id
         if (Auth::user()->type !== 'admin') {
@@ -106,74 +108,122 @@ class ConsultationController extends Controller
         ]);
     }
 
+
     public function change_operation($id)
-{
-    // البحث عن الاستشارة
-    $consultation = Consultation::with('pet')->find($id);
+    {
+        $consultation = Consultation::find($id);
 
-    // التحقق من وجود الاستشارة
-    if (!$consultation) {
-        return response()->json([
-            'success' => false,
-            'message' => 'الاستشارة غير موجودة'
-        ], 404);
-    }
-
-    // التحقق من البيانات المدخلة
-    $validator = Validator::make(request()->all(), [
-        'operation' => 'required|in:call,chat,visit,inside,outside',
-        'admin_notes' => 'required_if:operation,call,outside|string',
-        'clinic_id' => 'required_if:operation,outside|exists:clinics,id'
-    ], [
-        'operation.required' => 'حالة العملية مطلوبة',
-        'operation.in' => 'حالة العملية يجب أن تكون call, chat, visit, inside أو outside',
-        'admin_notes.required_if' => 'ملاحظات المدير مطلوبة في حالة call أو outside',
-        'admin_notes.string' => 'ملاحظات المدير يجب أن تكون نصية',
-        'clinic_id.required_if' => 'معرف العيادة مطلوب عندما تكون العملية خارجية',
-        'clinic_id.exists' => 'العيادة المحددة غير موجودة'
-    ]);
-
-    // في حالة فشل التحقق
-    if ($validator->fails()) {
-        return response()->json([
-            'success' => false,
-            'errors' => $validator->errors()
-        ], 422);
-    }
-
-    // إذا كانت العملية outside، التحقق من نوع العيادة
-    if (request('operation') === 'outside') {
-        $clinic = Clinic::find(request('clinic_id'));
-
-        if (!$clinic || $clinic->type !== 'external') {
+        if (!$consultation) {
             return response()->json([
                 'success' => false,
-                'message' => 'يجب اختيار عيادة خارجية للعملية الخارجية'
+                'message' => 'الاستشارة غير موجودة'
+            ], 404);
+        }
+
+        $validator = Validator::make(request()->all(), [
+            'operation' => 'required|in:call,inside,outside',
+            'admin_notes' => 'required_if:operation,call,outside,inside|string',
+            'clinic_id' => 'required_if:operation,outside,inside|exists:clinics,id'
+        ], [
+            'operation.required' => 'حالة العملية مطلوبة',
+            'operation.in' => 'حالة العملية يجب أن تكون call أو inside أو outside',
+            'admin_notes.required_if' => 'ملاحظات المدير مطلوبة في حالة call أو outside أو inside',
+            'admin_notes.string' => 'ملاحظات المدير يجب أن تكون نصية',
+            'clinic_id.required_if' => 'معرف العيادة مطلوب عندما تكون العملية داخلية أو خارجية',
+            'clinic_id.exists' => 'العيادة المحددة غير موجودة'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors()
             ], 422);
         }
+
+        $operation = request('operation');
+        $consultation->operation = $operation;
+        $consultation->admin_notes = request('admin_notes');
+        $responseData = [];
+
+        if ($operation === 'call') {
+            $consultation->status = "complete";
+            $responseData['message'] = 'تم تحويل الاستشارة إلى مكالمة بنجاح';
+        }
+        elseif (in_array($operation, ['outside', 'inside'])) {
+            $clinic = Clinic::find(request('clinic_id'));
+
+            // التحقق من أن العيادة نشطة
+            if (!$clinic || $clinic->status !== 'active') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'يجب اختيار عيادة نشطة'
+                ], 422);
+            }
+
+            if ($operation === 'outside') {
+                if ($clinic->type !== 'external') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'يجب اختيار عيادة خارجية للعملية الخارجية'
+                    ], 422);
+                }
+
+                // إنشاء سجل Anwer_Cons مع معلومات العيادة
+                Anwer_Cons::updateOrCreate(
+                    ['consultation_id' => $consultation->id],
+                    [
+                        'clinic_info' => json_encode([
+                            'id' => $clinic->id,
+                            'name' => $clinic->user->name,
+                            'address' => $clinic->address,
+                            'phone' => $clinic->phone,
+                            'latitude' => $clinic->latitude,
+                            'longitude' => $clinic->longitude,
+                            'opening_time' => $clinic->opening_time,
+                            'closing_time' => $clinic->closing_time,
+                            'type' => $clinic->type,
+                            'status' => $clinic->status,
+
+
+                        ]),
+                        'operation' => $operation
+                    ]
+                );
+
+                $consultation->status = "complete";
+                $responseData['message'] = 'تم تحويل الاستشارة إلى عيادة خارجية بنجاح';
+                $responseData['clinic'] = $clinic;
+            }
+            else { // حالة inside
+                if ($clinic->type !== 'integrated') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'يجب اختيار عيادة داخلية للعملية الداخلية'
+                    ], 422);
+                }
+
+                $consultation->status = "reviewed";
+                $responseData['message'] = 'تم تحويل الاستشارة إلى عيادة داخلية بنجاح ويجب مراجعتها';
+
+                // إنشاء سجل Order_Clinic في حالة inside
+                Order_Clinic::create([
+                    'consultation_id' => $consultation->id,
+                    'clinic_id' => $clinic->id,
+                    'status' => 'pending',
+                    'operation' => $operation
+                ]);
+            }
+        }
+
+        $consultation->save();
+
+        return response()->json([
+            'success' => true,
+            'data' => array_merge($consultation->toArray(), $responseData)
+        ]);
     }
 
-    // تحديث بيانات الاستشارة
-    $consultation->operation = request('operation');
-    $consultation->admin_notes = request('admin_notes');
 
-    // إذا كانت العملية اتصال (call)
-    if (request('operation') === 'call') {
-        $consultation->status = 'complete';
-    }
-    // إذا كانت العملية خارجية (outside)
-    elseif (request('operation') === 'outside') {
-        $consultation->status = 'complete';
-    }
-
-    $consultation->save();
-
-    return response()->json([
-        'success' => true,
-        'message' => 'تم تحديث حالة الاستشارة بنجاح',
-        'data' => $consultation
-    ]);
-}
     /**
      * التحقق من وجود اشتراك فعال للمستخدم
      */
@@ -200,4 +250,90 @@ class ConsultationController extends Controller
             'subscription' => $activeSubscription
         ];
     }
+
+
+
+    /**
+ * إعادة تحويل الاستشارة إلى عيادة أخرى
+ */
+public function reassignToClinic($consultationId)
+{
+    $consultation = Consultation::find($consultationId);
+
+    // التحقق من وجود الاستشارة
+    if (!$consultation) {
+        return response()->json([
+            'success' => false,
+            'message' => 'الاستشارة غير موجودة'
+        ], 404);
+    }
+
+    // التحقق من أن حالة الاستشارة مرفوضة
+    if ($consultation->status !== 'disapproved') {
+        return response()->json([
+            'success' => false,
+            'message' => 'لا يمكن إعادة التحويل إلا للاستشارات المرفوضة'
+        ], 400);
+    }
+
+    $validator = Validator::make(request()->all(), [
+        'clinic_id' => 'required|exists:clinics,id',
+    ], [
+        'clinic_id.required' => 'معرف العيادة مطلوب',
+        'clinic_id.exists' => 'العيادة المحددة غير موجودة',
+
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json([
+            'success' => false,
+            'errors' => $validator->errors()
+        ], 422);
+    }
+
+    $clinic = Clinic::find(request('clinic_id'));
+
+    // التحقق من أن العيادة نشطة
+    if (!$clinic || $clinic->status !== 'active') {
+        return response()->json([
+            'success' => false,
+            'message' => 'يجب اختيار عيادة نشطة'
+        ], 422);
+    }
+
+    DB::beginTransaction();
+    try {
+        // تحديث حالة الاستشارة
+        $consultation->update([
+            'status' => 'reviewed',
+        ]);
+
+        // إنشاء سجل جديد في Order_Clinic
+        $order = Order_Clinic::create([
+            'consultation_id' => $consultation->id,
+            'clinic_id' => $clinic->id,
+            'status' => 'pending',
+        ]);
+
+        DB::commit();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تم إعادة تحويل الاستشارة إلى العيادة الجديدة بنجاح',
+            'data' => [
+                'consultation' => $consultation,
+                'new_clinic' => $clinic,
+                'order' => $order
+            ]
+        ]);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return response()->json([
+            'success' => false,
+            'message' => 'حدث خطأ أثناء إعادة التحويل',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
 }

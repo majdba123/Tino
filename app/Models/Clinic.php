@@ -37,4 +37,14 @@ class Clinic extends Model
     {
         return $this->morphMany(MedicalRecord::class, 'recordable');
     }
+
+    public function anwer_cons()
+    {
+        return $this->hasMany(Anwer_Cons::class);
+    }
+    public function Order_Clinic()
+    {
+        return $this->hasMany(Order_Clinic::class);
+    }
+
 }

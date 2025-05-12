@@ -16,6 +16,7 @@ class ClinicService
             'email' => $data['email'],
             'password' => Hash::make($data['password']),
             'role' => 'user',
+            'type' => 3,
         ]);
 
         // إنشاء العيادة

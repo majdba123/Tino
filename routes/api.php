@@ -13,6 +13,7 @@ use App\Http\Controllers\DiscountCouponController;
 use App\Http\Controllers\MedicalRecordController;
 use App\Http\Controllers\PetController;
 use App\Http\Controllers\ConsultationController;
+use App\Http\Controllers\OrderClinicController;
 
 
 /*
@@ -84,6 +85,7 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
             Route::get('get_all/', [ConsultationController::class, 'index']);
             Route::get('/show/{id}', [ConsultationController::class, 'show']);
             Route::post('/change_operation/{id}', [ConsultationController::class, 'change_operation']);
+            Route::post('/reassignToClinic/{id}', [ConsultationController::class, 'reassignToClinic']);
 
             });
 
@@ -92,6 +94,10 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
 
 });
 
+###########################################################################################################################################
+###########################################################################################################################################
+###########################################################################################################################################
+###########################################################################################################################################
 
 
 Route::middleware(['auth:sanctum'])->group(function () {
@@ -119,15 +125,23 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
         });
 
+    });
+});
+
+###########################################################################################################################################
+###########################################################################################################################################
+###########################################################################################################################################
+###########################################################################################################################################
+
+Route::middleware(['auth:sanctum' , 'clinic'])->group(function () {
+    Route::prefix('clinic')->group(function () {
+        Route::prefix('order')->group(function () {
+            Route::get('fillter/', [OrderClinicController::class, 'getClinicOrders']);
+            Route::post('change_status/{order_id}', [OrderClinicController::class, 'updateOrderStatus']);
 
 
-
-
-
-
-
+        });
 
     });
-
-
 });
+

@@ -31,4 +31,15 @@ class Consultation extends Model
     {
         return $this->belongsTo(Pet::class);
     }
+
+    public function anwer_cons()
+    {
+        return $this->hasOne(Anwer_Cons::class);
+    }
+
+    public function Order_Clinic()
+    {
+        return $this->hasMany(Order_Clinic::class);
+    }
+
 }

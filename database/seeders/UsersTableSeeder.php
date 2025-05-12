@@ -30,6 +30,13 @@ class UsersTableSeeder extends Seeder
             'type' => "admin",
         ]);
 
+        User::create([
+            'id' => 3,
+            'name' => 'clinic',
+            'email' => 'clinic@example.com',
+            'password' => Hash::make('password'),
+            'type' => 3,
+        ]);
 
 
 
