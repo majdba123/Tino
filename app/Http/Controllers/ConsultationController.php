@@ -62,7 +62,7 @@ class ConsultationController extends Controller
         $query = Consultation::query()->with('pet','anwer_cons')->latest(); // الترتيب حسب الأحدث (حقل created_at)
 
         // إذا لم يكن المستخدم مدير (admin)، نضيف شرط user_id
-        if (Auth::user()->type !== 'admin') {
+        if (Auth::user()->type !== 'admin' && Auth::user()->type !== '2') {
             $query->where('user_id', Auth::id());
         }
 
@@ -93,9 +93,14 @@ class ConsultationController extends Controller
     public function show($id)
     {
         $consultation = Consultation::with('pet')->find($id);
-
+        if (!$consultation) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Consultation not found'
+            ], 404);
+        }
         // إذا لم يكن المستخدم مديراً (admin) ولم يكن صاحب الاستشارة
-        if (Auth::user()->type !== 'admin' && $consultation->user_id !== Auth::id()) {
+        if (Auth::user()->type !== 'admin' && $consultation->user_id !== Auth::id() && Auth::user()->type !== '2') {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized'
