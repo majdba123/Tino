@@ -8,16 +8,31 @@ use Illuminate\Support\Facades\Hash;
 
 class ClinicService
 {
-    public function createClinic(array $data)
+   public function createClinic(array $data)
     {
-        // إنشاء المستخدم أولاً
-        $user = User::create([
-            'name' => $data['name'],
-            'email' => $data['email'],
-            'password' => Hash::make($data['password']),
-            'role' => 'user',
-            'type' => 3,
-        ]);
+        // التحقق من وجود مستخدم بنفس البريد الإلكتروني
+        $existingUser = User::where('email', $data['email'])->first();
+
+        if ($existingUser) {
+            // إذا كان المستخدم موجودًا بالفعل، تحقق مما إذا كان لديه عيادة
+            $existingClinic = Clinic::where('user_id', $existingUser->id)->first();
+
+            if ($existingClinic) {
+                throw new \Exception('المستخدم لديه عيادة مسجلة بالفعل');
+            }
+
+            // إذا لم يكن لديه عيادة، استخدم المستخدم الموجود
+            $user = $existingUser;
+        } else {
+            // إنشاء مستخدم جديد إذا لم يكن موجودًا
+            $user = User::create([
+                'name' => $data['name'],
+                'email' => $data['email'],
+                'password' => Hash::make($data['password']),
+                'role' => 'user',
+                'type' => 3,
+            ]);
+        }
 
         // إنشاء العيادة
         $clinic = Clinic::create([

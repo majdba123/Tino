@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Anwer_Cons;
+use App\Models\Clinic;
 use App\Models\Order_Clinic;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -14,25 +15,32 @@ class OrderClinicController extends Controller
      */
     public function getClinicOrders(Request $request)
     {
-        $clinic = auth()->user()->clinic;
+        $user = auth()->user();
 
-        if (!$clinic) {
-            return response()->json([
-                'success' => false,
-                'message' => 'عيادة غير مسجلة'
-            ], 404);
-        }
-
-        // Eager load relationships with specific columns
+        // بناء الاستعلام الأساسي
         $query = Order_Clinic::with([
             'consultation:id,user_id,pet_id,description,status,admin_notes,operation',
             'consultation.pet:id,name,type,gender',
             'consultation.user:id,name,email',
             'consultation.pet.medicalRecords:id,details,date,pet_id',
             'consultation.anwer_cons:id,consultation_id,clinic_info,operation'
-        ])->where('clinic_id', $clinic->id);
+        ]);
 
-        // Apply filters
+        // إذا كان المستخدم ليس من النوع 1 ولديه عيادة
+        if ($user->type != "admin") {
+            $clinic = $user->clinic;
+
+            if (!$clinic) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'عيادة غير مسجلة'
+                ], 404);
+            }
+
+            $query->where('clinic_id', $clinic->id);
+        }
+
+        // تطبيق الفلاتر
         if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
@@ -45,10 +53,10 @@ class OrderClinicController extends Controller
             $query->whereDate('created_at', '<=', $request->date_to);
         }
 
-        // Get paginated results
+        // الحصول على النتائج مع التقسيم
         $orders = $query->latest()->paginate(10);
 
-        // Prepare response data
+        // تحضير البيانات للاستجابة
         return response()->json([
             'success' => true,
             'data' => $orders->map(function ($order) {
@@ -418,9 +426,105 @@ class OrderClinicController extends Controller
     /**
      * Show the form for editing the specified resource.
      */
-    public function edit(Order_Clinic $order_Clinic)
+    public function show_clinic_order(Request $request , $clinic_id)
     {
-        //
+        $clinic = Clinic::find($clinic_id);
+
+            if (!$clinic) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'العيادة غير موجودة'
+                ], 404);
+            }
+
+            if ($clinic->type === 'external') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'لا يمكن عرض طلبات العيادات الخارجية'
+                ], 403);
+            }
+        // بناء الاستعلام الأساسي
+        $query = Order_Clinic::with([
+            'consultation:id,user_id,pet_id,description,status,admin_notes,operation',
+            'consultation.pet:id,name,type,gender',
+            'consultation.user:id,name,email',
+            'consultation.pet.medicalRecords:id,details,date,pet_id',
+            'consultation.anwer_cons:id,consultation_id,clinic_info,operation'
+        ]);
+
+
+
+        $query->where('clinic_id', $clinic_id);
+
+
+        // تطبيق الفلاتر
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('date_from')) {
+            $query->whereDate('created_at', '>=', $request->date_from);
+        }
+
+        if ($request->filled('date_to')) {
+            $query->whereDate('created_at', '<=', $request->date_to);
+        }
+
+        // الحصول على النتائج مع التقسيم
+        $orders = $query->latest()->paginate(10);
+
+        // تحضير البيانات للاستجابة
+        return response()->json([
+            'success' => true,
+            'data' => $orders->map(function ($order) {
+                $clinicInfo = $order->consultation->anwer_cons
+                    ? json_decode($order->consultation->anwer_cons->clinic_info, true)
+                    : null;
+
+                return [
+                    'id' => $order->id,
+                    'status' => $order->status,
+                    'created_at' => $order->created_at,
+                    'price_order' => $order->price_order,
+                    'discount_amount' => $order->discount_amount,
+                    'final_price' => $order->final_price,
+                    'consultation' => [
+                        'id' => $order->consultation->id,
+                        'description' => $order->consultation->description,
+                        'status' => $order->consultation->status,
+                        'admin_notes' => $order->consultation->admin_notes,
+                        'operation' => $order->consultation->operation,
+                        'answer' => $order->consultation->anwer_cons ? [
+                            'clinic_info' => $clinicInfo,
+                            'operation' => $order->consultation->anwer_cons->operation
+                        ] : null,
+                        'pet' => [
+                            'name' => $order->consultation->pet->name,
+                            'type' => $order->consultation->pet->type,
+                            'gender' => $order->consultation->pet->gender,
+                            'medical_records' => $order->consultation->pet->medicalRecords
+                                ? $order->consultation->pet->medicalRecords->map(fn ($record) => [
+                                    'date' => $record->date,
+                                    'details' => $record->details
+                                ])
+                                : []
+                        ],
+                        'user' => [
+                            'name' => $order->consultation->user->name,
+                            'email' => $order->consultation->user->email
+                        ]
+                    ]
+                ];
+            }),
+            'pagination' => [
+                'total' => $orders->total(),
+                'per_page' => $orders->perPage(),
+                'current_page' => $orders->currentPage(),
+                'last_page' => $orders->lastPage(),
+                'from' => $orders->firstItem(),
+                'to' => $orders->lastItem()
+            ]
+        ]);
     }
 
     /**
@@ -434,8 +538,84 @@ class OrderClinicController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Order_Clinic $order_Clinic)
+    public function showOrder($orderId)
     {
-        //
+        $user = auth()->user();
+        $clinic = $user->clinic;
+
+        // إذا كان المستخدم ليس من النوع admin ولديه عيادة
+        if ($user->type != "admin" && !$clinic) {
+            return response()->json([
+                'success' => false,
+                'message' => 'عيادة غير مسجلة'
+            ], 404);
+        }
+
+        // البحث عن الطلب مع العلاقات
+        $query = Order_Clinic::with([
+            'consultation:id,user_id,pet_id,description,status,admin_notes,operation',
+            'consultation.pet:id,name,type,gender',
+            'consultation.user:id,name,email',
+            'consultation.pet.medicalRecords:id,details,date,pet_id',
+            'consultation.anwer_cons:id,consultation_id,clinic_info,operation'
+        ]);
+
+        // إذا كان المستخدم ليس من النوع admin، نتحقق من أن الطلب خاص بعيادته
+        if ($user->type != "admin") {
+            $query->where('clinic_id', $clinic->id);
+        }
+
+        $order = $query->find($orderId);
+
+        if (!$order) {
+            return response()->json([
+                'success' => false,
+                'message' => 'الطلب غير موجود أو لا ينتمي إلى هذه العيادة'
+            ], 404);
+        }
+
+        // تحضير البيانات للاستجابة
+        $clinicInfo = $order->consultation->anwer_cons
+            ? json_decode($order->consultation->anwer_cons->clinic_info, true)
+            : null;
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'id' => $order->id,
+                'status' => $order->status,
+                'created_at' => $order->created_at,
+                'price_order' => $order->price_order,
+                'discount_amount' => $order->discount_amount,
+                'final_price' => $order->final_price,
+                'clinic_note' => $order->clinic_note,
+                'consultation' => [
+                    'id' => $order->consultation->id,
+                    'description' => $order->consultation->description,
+                    'status' => $order->consultation->status,
+                    'admin_notes' => $order->consultation->admin_notes,
+                    'operation' => $order->consultation->operation,
+                    'answer' => $order->consultation->anwer_cons ? [
+                        'clinic_info' => $clinicInfo,
+                        'operation' => $order->consultation->anwer_cons->operation
+                    ] : null,
+                    'pet' => [
+                        'name' => $order->consultation->pet->name,
+                        'type' => $order->consultation->pet->type,
+                        'gender' => $order->consultation->pet->gender,
+                        'medical_records' => $order->consultation->pet->medicalRecords
+                            ? $order->consultation->pet->medicalRecords->map(fn ($record) => [
+                                'date' => $record->date,
+                                'details' => $record->details
+                            ])
+                            : []
+                    ],
+                    'user' => [
+                        'name' => $order->consultation->user->name,
+                        'email' => $order->consultation->user->email
+                    ]
+                ]
+            ]
+        ]);
     }
 }

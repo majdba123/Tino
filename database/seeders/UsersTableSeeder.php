@@ -38,6 +38,14 @@ class UsersTableSeeder extends Seeder
             'type' => 3,
         ]);
 
+        User::create([
+            'id' => 4,
+            'name' => 'clinic',
+            'email' => 'clinic1@example.com',
+            'password' => Hash::make('password'),
+            'type' => 3,
+        ]);
+
 
 
     }

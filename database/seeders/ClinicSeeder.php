@@ -40,7 +40,7 @@ class ClinicSeeder extends Seeder
             'closing_time' => Carbon::createFromTime(21, 0, 0),
             'type' => 'external',
             'status' => 'active',
-            'user_id' =>3
+            'user_id' =>4
         ]);
 
 

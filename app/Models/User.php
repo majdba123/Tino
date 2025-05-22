@@ -22,6 +22,7 @@ class User extends Authenticatable
         'google_id',
         'facebook_id',
         'phone',
+        'image',
         'email',
         'otp',
         'type',
@@ -89,6 +90,12 @@ class User extends Authenticatable
     public function consultations()
     {
         return $this->hasMany(Consultation::class);
+    }
+
+
+    public function contact()
+    {
+        return $this->hasMany(Contact::class);
     }
 
 

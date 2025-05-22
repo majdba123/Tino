@@ -15,6 +15,8 @@ use App\Http\Controllers\PetController;
 use App\Http\Controllers\ConsultationController;
 use App\Http\Controllers\OrderClinicController;
 use App\Http\Controllers\EmployeeController;
+use App\Http\Controllers\UserController;
+use App\Http\Controllers\ContactController;
 
 
 /*
@@ -97,6 +99,22 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
             Route::delete('delete/{id}', [EmployeeController::class, 'destroy']);
         });
 
+
+        Route::prefix('order')->group(function () {
+            Route::get('/fillter', [OrderClinicController::class, 'getClinicOrders']);
+            Route::get('/show_clinic_order/{clinic_id}', [OrderClinicController::class, 'show_clinic_order']);
+            Route::get('show/{id}', [OrderClinicController::class, 'showOrder']);
+
+        });
+
+
+        Route::prefix('contact')->group(function () {
+            Route::post('/store_reply/{contact_id}', [ContactController::class, 'storeReply']);
+            Route::get('/get_all', [ContactController::class, 'allContacts']);
+            Route::delete('delete/{contact_id}', [ContactController::class, 'destroy']);
+          });
+
+
     });
 
 
@@ -136,6 +154,22 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
         });
 
+        Route::prefix('profile')->group(function () {
+            Route::post('/update', [UserController::class, 'updateProfile']);
+            Route::get('/my_info', [UserController::class, 'getProfile']);
+        });
+
+
+
+        Route::prefix('contact')->group(function () {
+            Route::post('/store', [ContactController::class, 'store']);
+            Route::get('/my_contact', [ContactController::class, 'myContacts']);
+
+         });
+
+
+
+
     });
 });
 
@@ -148,12 +182,19 @@ Route::middleware(['auth:sanctum' , 'clinic'])->group(function () {
     Route::prefix('clinic')->group(function () {
         Route::prefix('order')->group(function () {
             Route::get('fillter/', [OrderClinicController::class, 'getClinicOrders']);
+            Route::get('show/{id}', [OrderClinicController::class, 'showOrder']);
             Route::post('change_status/{order_id}', [OrderClinicController::class, 'updateOrderStatus']);
             Route::post('QR/', [OrderClinicController::class, 'checkAndUpdateOrderStatus']);
             Route::post('finished_order/', [OrderClinicController::class, 'completeOrder']);
 
 
         });
+
+        Route::prefix('profile')->group(function () {
+            Route::post('/update', [UserController::class, 'updateClinicProfile']);
+            Route::get('/my_info', [UserController::class, 'getClinicProfile']);
+        });
+
 
     });
 });
