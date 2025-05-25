@@ -128,4 +128,74 @@ class ClinicController extends Controller
             'message' => 'تم حذف العيادة بنجاح'
         ], Response::HTTP_OK);
     }
+
+    // Add this method to your ClinicController
+    public function getClinicStatistics($id = null)
+    {
+        // If no ID provided, get clinic from authenticated user
+        if ($id === null) {
+            $user = auth()->user();
+            if (!$user->clinic) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No clinic associated with this user'
+                ], 404);
+            }
+            $clinic = $user->clinic;
+        } else {
+            $clinic = Clinic::find($id);
+            if (!$clinic) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Clinic not found'
+                ], 404);
+            }
+        }
+
+        // Get all orders for this clinic
+        $orders = $clinic->Order_Clinic;
+
+        // Calculate statistics
+        $totalOrders = $orders->count();
+        $approvedOrders = $orders->where('status', 'approved')->count();
+        $disapprovedOrders = $orders->where('status', 'disapproved')->count();
+        $completedOrders = $orders->where('status', 'complete')->count();
+        $pendingOrders = $orders->where('status', 'pending')->count();
+
+        // Calculate financial statistics
+        $totalRevenue = $orders->where('status', 'complete')->sum('final_price');
+        $totalDiscounts = $orders->where('status', 'complete')->sum('discount_amount');
+        $averageOrderValue = $completedOrders > 0 ? $totalRevenue / $completedOrders : 0;
+
+        // Get orders with discount
+        $discountedOrders = $orders->where('have_discount', true)->count();
+        $discountPercentage = $totalOrders > 0 ? ($discountedOrders / $totalOrders) * 100 : 0;
+
+        // Group by status for more detailed analysis
+        $statusDistribution = $orders->groupBy('status')->map->count();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'clinic_id' => $clinic->id,
+                'clinic_name' => $clinic->user->name,
+                'total_orders' => $totalOrders,
+                'order_status' => [
+                    'approved' => $approvedOrders,
+                    'disapproved' => $disapprovedOrders,
+                    'completed' => $completedOrders,
+                    'pending' => $pendingOrders,
+                    'status_distribution' => $statusDistribution,
+                ],
+                'financial_statistics' => [
+                    'total_revenue' => $totalRevenue,
+                    'total_discounts' => $totalDiscounts,
+                    'average_order_value' => round($averageOrderValue, 2),
+                    'discounted_orders_count' => $discountedOrders,
+                    'discount_percentage' => round($discountPercentage, 2),
+                ],
+            ],
+            'message' => 'Clinic statistics retrieved successfully'
+        ]);
+    }
 }

@@ -308,4 +308,180 @@ class UserController extends Controller
         }
     }
 
+
+
+
+
+
+
+
+        public function getAllUsers(Request $request): JsonResponse
+        {
+        try {
+
+
+            $query = User::query();
+
+            // Add filters if needed
+            if ($request->has('type')) {
+                $query->where('type', $request->type);
+            }
+
+            if ($request->has('name')) {
+                $query->where('name', 'like', "%$request->name%");
+
+            }
+            if ($request->has('email')) {
+                $query->where('email', 'like', "%$request->email%");
+
+            }
+            if ($request->has('phone')) {
+                $query->where('phone', 'like', "%$request->phone%");
+
+            }
+
+
+            // Paginate results
+            $users = $query->paginate($request->per_page ?? 15);
+
+            // Format response
+            $users->getCollection()->transform(function ($user) {
+                return [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'phone' => $user->phone,
+                    'type' => $user->type,
+                    'image' => $user->image ? Storage::url($user->image) : null,
+                    'created_at' => $user->created_at->format('Y-m-d H:i:s'),
+                    'updated_at' => $user->updated_at->format('Y-m-d H:i:s')
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'data' => $users
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'فشل في جلب المستخدمين: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get specific user details (Admin only)
+     *
+     * @param int $id
+     * @return JsonResponse
+     */
+    public function getUserById($id): JsonResponse
+    {
+        try {
+
+            $user = User::find($id);
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'المستخدم غير موجود'
+                ], 404);
+            }
+
+            $response = [
+                'success' => true,
+                'data' => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'phone' => $user->phone,
+                    'type' => $user->type,
+                    'location' => [
+                        'lat' => $user->lat,
+                        'lang' => $user->lang
+                    ],
+                    'image' => $user->image ? Storage::url($user->image) : null,
+                    'created_at' => $user->created_at->format('Y-m-d H:i:s'),
+                    'updated_at' => $user->updated_at->format('Y-m-d H:i:s')
+                ]
+            ];
+
+            // Add clinic data if user is a clinic
+            if ($user->type === '3' && $user->clinic) {
+                $response['data']['clinic'] = [
+                    'address' => $user->clinic->address,
+                    'working_hours' => [
+                        'opening_time' => $user->clinic->opening_time,
+                        'closing_time' => $user->clinic->closing_time
+                    ],
+                    'status' => $user->clinic->status
+                ];
+            }
+
+            return response()->json($response);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'فشل في جلب بيانات المستخدم: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete a user (Admin only)
+     *
+     * @param int $id
+     * @return JsonResponse
+     */
+    public function deleteUser($id): JsonResponse
+    {
+        try {
+            // Check if user is admin
+            if (Auth::user()->type !== 'admin') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'غير مصرح بالوصول'
+                ], 403);
+            }
+
+            // Prevent admin from deleting themselves
+            if (Auth::id() == $id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'لا يمكنك حذف حسابك الخاص'
+                ], 400);
+            }
+
+            $user = User::find($id);
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'المستخدم غير موجود'
+                ], 404);
+            }
+
+            // Delete user image if exists
+            if ($user->image && Storage::exists($user->image)) {
+                Storage::delete($user->image);
+            }
+
+            $user->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'تم حذف المستخدم بنجاح'
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'فشل في حذف المستخدم: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
 }

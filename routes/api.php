@@ -17,7 +17,7 @@ use App\Http\Controllers\OrderClinicController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\ContactController;
-
+use App\Http\Controllers\PillController;
 
 /*
 |--------------------------------------------------------------------------
@@ -78,6 +78,7 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
             Route::post('/store', [ClinicController::class, 'store']);
             Route::put('/update/{id}', [ClinicController::class, 'update']); // PUT أو PATCH
             Route::get('fillter', [ClinicController::class, 'filter']);
+            Route::get('getClinicStatistics/{clinic_id}', [ClinicController::class, 'getClinicStatistics']);
             Route::get('show/{clinic_id}', [ClinicController::class, 'show']);
             Route::delete('/delete/{clinic_id}', [ClinicController::class, 'destroy']);
 
@@ -113,6 +114,23 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
             Route::get('/get_all', [ContactController::class, 'allContacts']);
             Route::delete('delete/{contact_id}', [ContactController::class, 'destroy']);
           });
+
+
+
+        Route::prefix('pill')->group(function () {
+            Route::get('/pdf/{pill_id}', [PillController::class, 'showPdfApi']);
+            Route::get('/get_all', [PillController::class, 'index']);
+            Route::get('/show/{pill_id}', [PillController::class, 'show']);
+
+        });
+
+
+        Route::prefix('user')->group(function () {
+            Route::get('/get_all', [UserController::class, 'getAllUsers']);
+            Route::get('/show/{id}', [UserController::class, 'getUserById']);
+            Route::delete('/delete/{pill_id}', [UserController::class, 'deleteUser']);
+
+        });
 
 
     });
@@ -195,6 +213,7 @@ Route::middleware(['auth:sanctum' , 'clinic'])->group(function () {
             Route::get('/my_info', [UserController::class, 'getClinicProfile']);
         });
 
+        Route::get('/dashboard', [ClinicController::class, 'getClinicStatistics']);
 
     });
 });
