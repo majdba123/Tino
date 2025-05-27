@@ -18,7 +18,11 @@ class Clinic extends Model
         'closing_time',
         'type',
         'status',
-        'user_id'
+        'user_id',
+        'tax_number',
+        'bank_account_info',
+        'payment_terms'
+
     ];
 
     protected $casts = [

@@ -42,6 +42,9 @@ class ClinicService
             'longitude' => $data['longitude'],
             'opening_time' => $data['opening_time'],
             'closing_time' => $data['closing_time'],
+            'bank_account_info' => $data['bank_account_info'],
+            'tax_number' => $data['tax_number'],
+            'payment_terms' => $data['payment_terms'],
             'type' => $data['type'],
             'user_id' => $user->id,
         ]);
@@ -63,7 +66,11 @@ class ClinicService
             'opening_time',
             'closing_time',
             'type',
-            'status'
+            'status',
+            'tax_number',
+            'bank_account_info',
+            'payment_terms'
+
         ];
 
         $updateData = array_intersect_key($data, array_flip($updatableFields));

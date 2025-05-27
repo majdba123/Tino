@@ -14,6 +14,9 @@ return new class extends Migration
         Schema::create('clinics', function (Blueprint $table) {
             $table->id();
             $table->string('address');
+            $table->string('payment_terms');
+            $table->string('tax_number');
+            $table->string('bank_account_info');
             $table->string('phone');
             $table->decimal('latitude', 10, 8);
             $table->decimal('longitude', 10, 8);

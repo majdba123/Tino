@@ -22,6 +22,10 @@ class UpdateClinicRequest extends FormRequest
             'closing_time' => 'sometimes|required|date_format:H:i|after:opening_time',
             'type' => 'sometimes|required|in:integrated,external',
             'status' => 'sometimes|required|in:active,inactive',
+            'tax_number' => 'sometimes|string|max:500',
+            'bank_account_info' => 'sometimes|string|max:500',
+            'payment_terms' => 'sometimes|string|max:500',
+
         ];
     }
 

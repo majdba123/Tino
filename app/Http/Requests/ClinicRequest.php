@@ -18,6 +18,11 @@ class ClinicRequest extends FormRequest
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:8|confirmed',
             'address' => 'required|string|max:500',
+
+            'tax_number' => 'required|string|max:500',
+            'bank_account_info' => 'required|string|max:500',
+            'payment_terms' => 'required|string|max:500',
+
             'phone' => 'required|string|max:20',
             'latitude' => 'required|numeric',
             'longitude' => 'required|numeric',

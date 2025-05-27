@@ -4,8 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\Anwer_Cons;
 use App\Models\Clinic;
+use App\Models\MedicalRecord;
 use App\Models\Order_Clinic;
+use App\Models\Pill;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 class OrderClinicController extends Controller
@@ -155,13 +158,13 @@ class OrderClinicController extends Controller
         // إذا كانت الحالة approved، التحقق من وجود تاريخ ووقت الزيارة
         if ($request->status === 'approved') {
             $validator = Validator::make($request->all(), [
-                'visit_date' => 'required|date|after_or_equal:today',
-                'visit_time' => 'required|date_format:H:i'
+                'visit_date' => 'sometimes|date|after_or_equal:today',
+                'visit_time' => 'sometimes|date_format:H:i'
             ], [
-                'visit_date.required' => 'تاريخ الزيارة مطلوب',
+                'visit_date.sometimes' => 'تاريخ الزيارة مطلوب',
                 'visit_date.date' => 'يجب أن يكون تاريخاً صالحاً',
                 'visit_date.after_or_equal' => 'يجب أن يكون التاريخ اليوم أو ما بعده',
-                'visit_time.required' => 'وقت الزيارة مطلوب',
+                'visit_time.sometimes' => 'وقت الزيارة مطلوب',
                 'visit_time.date_format' => 'يجب أن يكون الوقت بتنسيق ساعة:دقيقة (24 ساعة)'
             ]);
 
@@ -328,15 +331,33 @@ class OrderClinicController extends Controller
  */
     public function completeOrder(Request $request)
     {
+        // Validation rules
         $validator = Validator::make($request->all(), [
             'order_id' => 'required|exists:order__clinics,id',
-            'price_order' => 'required|numeric|min:0',
             'have_discount' => 'required|boolean',
             'discount_percent' => 'required_if:have_discount,true|numeric|min:0|max:100|nullable',
-            'medical_details' => 'required|string',
-            'clinic_note' => 'required|string'
+            'invoice_services' => 'required|array|min:1',
+            'invoice_services.*.name' => 'required|string|max:255',
+            'invoice_services.*.price' => 'required|numeric|min:0',
+            'medical_services' => 'required|array|min:1',
+            'medical_services.*.procedure' => 'required|string|max:255',
+            'medical_services.*.description' => 'required|string',
+            'clinic_note' => 'required|string',
+            'tax_percent' => 'required|numeric|min:0|max:100',
+            'service_date' => 'required|date',
+            'insurance_info' => 'nullable|string',
+            'payment_notes' => 'nullable|string'
         ], [
-            // ... your existing validation messages ...
+            'order_id.required' => 'معرف الطلب مطلوب',
+            'order_id.exists' => 'الطلب غير موجود',
+            'have_discount.required' => 'حالة الخصم مطلوبة',
+            'have_discount.boolean' => 'حالة الخصم يجب أن تكون true أو false',
+            'discount_percent.required_if' => 'نسبة الخصم مطلوبة عند وجود خصم',
+            'invoice_services.required' => 'خدمات الفاتورة مطلوبة',
+            'medical_services.required' => 'الخدمات الطبية مطلوبة',
+            'clinic_note.required' => 'ملاحظات العيادة مطلوبة',
+            'tax_percent.required' => 'نسبة الضريبة مطلوبة',
+            'service_date.required' => 'تاريخ الخدمة مطلوب'
         ]);
 
         if ($validator->fails()) {
@@ -346,6 +367,7 @@ class OrderClinicController extends Controller
             ], 422);
         }
 
+        // Get authenticated clinic
         $clinic = auth()->user()->clinic;
         if (!$clinic) {
             return response()->json([
@@ -354,179 +376,108 @@ class OrderClinicController extends Controller
             ], 404);
         }
 
-        $order = Order_Clinic::with(['consultation.pet'])
+        // Find the order
+        $order = Order_Clinic::with(['consultation.pet.user', 'clinic'])
             ->where('id', $request->order_id)
             ->where('clinic_id', $clinic->id)
-            ->first();
+            ->firstOrFail();
 
-        if (!$order) {
-            return response()->json([
-                'success' => false,
-                'message' => 'الطلب غير موجود أو لا ينتمي إلى هذه العيادة'
-            ], 404);
-        }
-
+        // Validate order status
         if ($order->status !== 'in_clinic') {
             return response()->json([
                 'success' => false,
-                'message' => 'لا يمكن إكمال الطلب إلا إذا كان بحالة "في العيادة"',
-                'current_status' => $order->status
+                'message' => 'لا يمكن إكمال الطلب إلا إذا كان بحالة "في العيادة"'
             ], 400);
         }
 
-        // Calculate prices
-        $discountAmount = 0;
-        $finalPrice = $request->price_order;
+        // Calculate prices from invoice services
+        $invoiceServices = collect($request->invoice_services);
+        $subtotal = $invoiceServices->sum('price');
+        $taxAmount = ($subtotal * $request->tax_percent) / 100;
+        $discountAmount = $request->have_discount ? ($subtotal * $request->discount_percent) / 100 : 0;
+        $finalPrice = ($subtotal - $discountAmount) + $taxAmount;
 
-        if ($request->have_discount && $request->discount_percent) {
-            $discountAmount = ($request->price_order * $request->discount_percent) / 100;
-            $finalPrice = $request->price_order - $discountAmount;
-        }
+        // Generate invoice number
+        $invoiceNumber = 'INV-' . date('Y') . '-' . str_pad(Pill::count() + 1, 4, '0', STR_PAD_LEFT);
 
-        // Update order
-        $order->update([
-            'status' => 'complete',
-            'price_order' => $request->price_order,
-            'have_discount' => $request->have_discount,
-            'discount_percent' => $request->have_discount ? $request->discount_percent : null,
-            'discount_amount' => $discountAmount,
-            'final_price' => $finalPrice,
-            'clinic_note' => $request->clinic_note
-        ]);
-
-        // Create pill
-        $pill = $order->pill()->create([
-            'medical_details' => $request->medical_details,
-            'clinic_note' => $request->clinic_note,
-            'price_order' => $request->price_order,
-            'have_discount' => $request->have_discount,
-            'discount_percent' => $request->have_discount ? $request->discount_percent : null,
-            'discount_amount' => $discountAmount,
-            'final_price' => $finalPrice,
-            'issued_at' => now()
-        ]);
-
-        // Create medical record
-        if ($order->consultation && $order->consultation->pet) {
-            $medicalRecord = $clinic->medicalRecords()->create([
-                'details' => $request->medical_details,
-                'date' => now(),
-                'pet_id' => $order->consultation->pet->id
+        DB::beginTransaction();
+        try {
+            // Update order
+            $order->update([
+                'status' => 'complete',
+                'price_order' => $subtotal,
+                'have_discount' => $request->have_discount,
+                'discount_percent' => $request->discount_percent,
+                'discount_amount' => $discountAmount,
+                'final_price' => $finalPrice,
+                'clinic_note' => $request->clinic_note
             ]);
-        }
 
-        return response()->json([
-            'success' => true,
-            'message' => 'تم إكمال الطلب بنجاح وإنشاء الفاتورة والسجل الطبي',
-            'order' => $order->fresh(),
-            'pill' => $pill,
-            'medical_record' => $medicalRecord ?? null
-        ]);
-    }
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function show_clinic_order(Request $request , $clinic_id)
-    {
-        $clinic = Clinic::find($clinic_id);
+            // Create invoice (Pill)
+            $pill = $order->pill()->create([
+                'invoiceServices' => $invoiceServices->map(function ($service) {
+                    return [
+                        'name' => $service['name'],
+                        'price' => (float) $service['price'],
+                        'quantity' => $service['quantity'] ?? 1,
+                        'total' => (float) ($service['price'] * ($service['quantity'] ?? 1))
+                    ];
+                }),
+                'price_order' => $subtotal,
+                'have_discount' => $request->have_discount,
+                'discount_percent' => $request->discount_percent,
+                'discount_amount' => $discountAmount,
+                'tax_percent' => $request->tax_percent,
+                'tax_amount' => $taxAmount,
+                'final_price' => $finalPrice,
+                'issued_at' => now(),
+                'service_date' => $request->service_date,
+                'insurance_info' => $request->insurance_info,
+                'payment_notes' => $request->payment_notes,
+                'clinic_note' => $request->clinic_note
+            ]);
 
-            if (!$clinic) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'العيادة غير موجودة'
-                ], 404);
+            // Create medical record (polymorphic)
+            if ($order->consultation?->pet) {
+                $medicalRecord = MedicalRecord::create([
+                    'details' => json_encode([
+                        'diagnosis' => $request->clinic_note,
+                        'services' => $request->medical_services
+                    ]),
+                    'date' => now(),
+                    'pet_id' => $order->consultation->pet->id,
+                    'recordable_id' => $clinic->id,
+                    'recordable_type' => Clinic::class
+                ]);
             }
 
-            if ($clinic->type === 'external') {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'لا يمكن عرض طلبات العيادات الخارجية'
-                ], 403);
-            }
-        // بناء الاستعلام الأساسي
-        $query = Order_Clinic::with([
-            'consultation:id,user_id,pet_id,description,status,admin_notes,operation',
-            'consultation.pet:id,name,type,gender',
-            'consultation.user:id,name,email',
-            'consultation.pet.medicalRecords:id,details,date,pet_id',
-            'consultation.anwer_cons:id,consultation_id,clinic_info,operation'
-        ]);
+            DB::commit();
 
-
-
-        $query->where('clinic_id', $clinic_id);
-
-
-        // تطبيق الفلاتر
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
-        }
-
-        if ($request->filled('date_from')) {
-            $query->whereDate('created_at', '>=', $request->date_from);
-        }
-
-        if ($request->filled('date_to')) {
-            $query->whereDate('created_at', '<=', $request->date_to);
-        }
-
-        // الحصول على النتائج مع التقسيم
-        $orders = $query->latest()->paginate(10);
-
-        // تحضير البيانات للاستجابة
-        return response()->json([
-            'success' => true,
-            'data' => $orders->map(function ($order) {
-                $clinicInfo = $order->consultation->anwer_cons
-                    ? json_decode($order->consultation->anwer_cons->clinic_info, true)
-                    : null;
-
-                return [
-                    'id' => $order->id,
-                    'status' => $order->status,
-                    'created_at' => $order->created_at,
-                    'price_order' => $order->price_order,
-                    'discount_amount' => $order->discount_amount,
-                    'final_price' => $order->final_price,
-                    'consultation' => [
-                        'id' => $order->consultation->id,
-                        'description' => $order->consultation->description,
-                        'status' => $order->consultation->status,
-                        'admin_notes' => $order->consultation->admin_notes,
-                        'operation' => $order->consultation->operation,
-                        'answer' => $order->consultation->anwer_cons ? [
-                            'clinic_info' => $clinicInfo,
-                            'operation' => $order->consultation->anwer_cons->operation
-                        ] : null,
-                        'pet' => [
-                            'name' => $order->consultation->pet->name,
-                            'type' => $order->consultation->pet->type,
-                            'gender' => $order->consultation->pet->gender,
-                            'medical_records' => $order->consultation->pet->medicalRecords
-                                ? $order->consultation->pet->medicalRecords->map(fn ($record) => [
-                                    'date' => $record->date,
-                                    'details' => $record->details
-                                ])
-                                : []
-                        ],
-                        'user' => [
-                            'name' => $order->consultation->user->name,
-                            'email' => $order->consultation->user->email
-                        ]
+            return response()->json([
+                'success' => true,
+                'message' => 'تم إصدار الفاتورة والسجل الطبي بنجاح',
+                'data' => [
+                    'invoice' => [
+                        'total' => $finalPrice,
+                        'services' => $pill->services
+                    ],
+                    'medical_record' => [
+                        'diagnosis' => $request->clinic_note,
+                        'treatment' => $request->payment_notes,
+                        'services' => $request->medical_services
                     ]
-                ];
-            }),
-            'pagination' => [
-                'total' => $orders->total(),
-                'per_page' => $orders->perPage(),
-                'current_page' => $orders->currentPage(),
-                'last_page' => $orders->lastPage(),
-                'from' => $orders->firstItem(),
-                'to' => $orders->lastItem()
-            ]
-        ]);
-    }
+                ]
+            ]);
 
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'فشل في إتمام العملية: ' . $e->getMessage(),
+                'trace' => config('app.debug') ? $e->getTrace() : null
+            ], 500);
+        }
+    }
     /**
      * Update the specified resource in storage.
      */
@@ -619,3 +570,7 @@ class OrderClinicController extends Controller
         ]);
     }
 }
+
+
+
+

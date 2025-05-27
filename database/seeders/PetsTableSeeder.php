@@ -19,6 +19,8 @@ class PetsTableSeeder extends Seeder
             'type' => 'كلب',
             'birth_date' => Carbon::now()->subYears(3),
             'gender' => 'male',
+            'name_cheap' => '321321321',
+            'breed' => 'ssas',
             'health_status' => 'excellent',
             'status' => 'active',
             'user_id' => 1 // ID المستخدم الإداري
@@ -29,6 +31,8 @@ class PetsTableSeeder extends Seeder
             'type' => 'قطة',
             'birth_date' => Carbon::now()->subYears(1),
             'gender' => 'male',
+            'name_cheap' => '321321321',
+            'breed' => 'ssas',
             'health_status' => 'excellent',
             'status' => 'active',
             'user_id' => 1 // ID المستخدم الإداري

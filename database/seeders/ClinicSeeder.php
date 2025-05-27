@@ -27,6 +27,10 @@ class ClinicSeeder extends Seeder
             'opening_time' => Carbon::createFromTime(8, 0, 0),
             'closing_time' => Carbon::createFromTime(22, 0, 0),
             'type' => 'integrated',
+            'tax_number' => 'tax_number',
+            'bank_account_info' => 'bank_account_info',
+            'payment_terms' => 'payment_terms',
+
             'status' => 'active',
             'user_id' => 3
         ]);
@@ -39,6 +43,9 @@ class ClinicSeeder extends Seeder
             'opening_time' => Carbon::createFromTime(9, 0, 0),
             'closing_time' => Carbon::createFromTime(21, 0, 0),
             'type' => 'external',
+                        'tax_number' => 'tax_number',
+            'bank_account_info' => 'bank_account_info',
+            'payment_terms' => 'payment_terms',
             'status' => 'active',
             'user_id' =>4
         ]);

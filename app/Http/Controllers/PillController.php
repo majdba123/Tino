@@ -89,7 +89,7 @@ public function index(Request $request)
 
         return response()->json([
             'success' => true,
-            'data' => $pill
+            'data' => $pill->getInvoiceData()
         ]);
     }
 

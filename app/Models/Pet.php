@@ -14,6 +14,8 @@ class Pet extends Model
         'type',
         'birth_date',
         'gender',
+        'name_cheap',
+        'breed',
         'health_status',
         'status',
         'user_id'

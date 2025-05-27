@@ -15,6 +15,8 @@ return new class extends Migration
             $table->id();
             $table->string('name');
             $table->string('type'); // نوع الحيوان (كلب، قطة، إلخ)
+            $table->string('name_cheap'); // نوع الحيوان (كلب، قطة، إلخ)
+            $table->string('breed'); // نوع الحيوان (كلب، قطة، إلخ)
             $table->date('birth_date')->nullable(); // تاريخ الميلاد بدلاً من العمر
             $table->enum('gender', ['male', 'female']); // الجنس
             $table->enum('health_status', ['excellent', 'good', 'fair', 'poor']); // الحالة الصحية
