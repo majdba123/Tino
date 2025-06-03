@@ -13,7 +13,8 @@ class PetRequest extends FormRequest
 
     public function rules()
     {
-        return [
+        // قاعدة التحقق عند الإنشاء
+        $rules = [
             'name' => 'required|string|max:255',
             'type' => 'required|string|max:255',
             'breed' => 'required|string|max:255',
@@ -23,6 +24,17 @@ class PetRequest extends FormRequest
             'health_status' => 'required|in:excellent,good,fair,poor',
             'status' => 'sometimes|in:active,inactive,deceased'
         ];
+
+        // إذا كانت الطريقة PATCH أو PUT (تحديث) نجعل الحقول غير مطلوبة
+        if ($this->isMethod('put')) {
+            foreach ($rules as $field => $rule) {
+                if (strpos($rule, 'required') !== false) {
+                    $rules[$field] = str_replace('required|', '', $rule);
+                }
+            }
+        }
+
+        return $rules;
     }
 
     public function messages()

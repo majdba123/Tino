@@ -159,6 +159,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
         });
 
         Route::post('pets/store', [PetController::class, 'store']);
+        Route::put('pets/update/{id}', [PetController::class, 'updatePet']);
+
         Route::get('pets/get_all', [PetController::class, 'index']);
         Route::post('/medical-records/store', [MedicalRecordController::class, 'store']);
         Route::get('discount-coupons/get_all', [DiscountCouponController::class, 'index']);

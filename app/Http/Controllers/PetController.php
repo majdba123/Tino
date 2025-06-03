@@ -74,4 +74,49 @@ class PetController extends Controller
             'data' => $pets
         ]);
     }
+
+public function updatePet(PetRequest $request, $id)
+{
+
+
+        // 2. البحث عن الحيوان والتحقق من ملكيته للمستخدم
+        $pet = Pet::where('user_id', auth()->id())->find($id);
+
+        if (!$pet) {
+            return response()->json([
+                'success' => false,
+                'message' => 'الحيوان الأليف غير موجود أو لا تملك صلاحية التعديل عليه'
+            ], 404);
+        }
+
+        // 3. تحديث البيانات مع التحقق من الحقول المطلوبة
+        $data = $request->only([
+            'name',
+            'type',
+            'breed',
+            'name_cheap',
+            'birth_date',
+            'gender',
+            'health_status',
+            'status'
+        ]);
+
+        // 4. التحقق من وجود بيانات للتحديث
+        if (empty($data)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'لم يتم تقديم أي بيانات للتحديث'
+            ], 400);
+        }
+
+        // 5. تنفيذ التحديث
+        $pet->update($data);
+
+        // 6. إرجاع النتيجة مع بيانات محدثة
+        return response()->json([
+            'success' => true,
+            'message' => 'تم تحديث معلومات الحيوان الأليف بنجاح',
+            'data' => $pet->fresh()
+        ]);
+}
 }
