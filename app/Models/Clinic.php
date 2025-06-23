@@ -51,4 +51,11 @@ class Clinic extends Model
         return $this->hasMany(Order_Clinic::class);
     }
 
+
+    public function user_review()
+    {
+        return $this->hasMany(User_Review::class);
+    }
+
+
 }

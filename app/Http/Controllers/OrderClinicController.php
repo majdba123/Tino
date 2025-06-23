@@ -7,6 +7,7 @@ use App\Models\Clinic;
 use App\Models\MedicalRecord;
 use App\Models\Order_Clinic;
 use App\Models\Pill;
+use App\Models\User_Review;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -452,6 +453,15 @@ class OrderClinicController extends Controller
             }
 
             DB::commit();
+
+
+            User_Review::create([
+                    'user_id' => $order->consultation->pet->user->id,
+                    'clinic_id' => $clinic->id,
+                    'status' => 'pending', // أو أي حالة تريدها
+                    'review' => null,
+                ]);
+
 
             return response()->json([
                 'success' => true,

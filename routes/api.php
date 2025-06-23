@@ -19,6 +19,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\PillController;
 use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\UserReviewController;
 
 /*
 |--------------------------------------------------------------------------
@@ -137,6 +138,14 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
         });
 
 
+        Route::prefix('review')->group(function () {
+        Route::get('/get_all', [UserReviewController::class, 'getAllRatings']);
+        Route::delete('/delete/{id}', [UserReviewController::class, 'adminDestroy']);
+
+        });
+
+
+
     });
 
 
@@ -196,6 +205,13 @@ Route::middleware(['auth:sanctum'])->group(function () {
          });
 
 
+        Route::prefix('review')->group(function () {
+            Route::get('/get_all', [UserReviewController::class, 'getUserRatings']);
+            Route::put('/update/{rating}', [UserReviewController::class, 'update']);
+            Route::delete('/delete/{rating}', [UserReviewController::class, 'destroy']);
+
+        });
+
 
 
     });
@@ -221,6 +237,12 @@ Route::middleware(['auth:sanctum' , 'clinic'])->group(function () {
         Route::prefix('profile')->group(function () {
             Route::post('/update', [UserController::class, 'updateClinicProfile']);
             Route::get('/my_info', [UserController::class, 'getClinicProfile']);
+        });
+
+
+        Route::prefix('review')->group(function () {
+            Route::get('/get_all', [UserReviewController::class, 'getClinicRatings']);
+
         });
 
         Route::get('/dashboard', [ClinicController::class, 'getClinicStatistics']);
