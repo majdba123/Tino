@@ -22,6 +22,11 @@ return new class extends Migration
             $table->decimal('price_paid', 10, 2);
             $table->boolean('is_active')->default(true);
 
+             $table->string('payment_method')->nullable(); // نوع الحيوان (كلب، قطة، إلخ)
+            $table->string('payment_status')->nullable(); // نوع الحيوان (كلب، قطة، إلخ)
+            $table->string('payment_session_id')->nullable(); // نوع الحيوان (كلب، قطة، إلخ)
+
+
             $table->timestamps();
         });
     }

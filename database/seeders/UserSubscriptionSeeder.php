@@ -22,7 +22,10 @@ class UserSubscriptionSeeder extends Seeder
             'remaining_calls' => 0, // عدد المكالمات المتبقية
             'remaining_visits' => 0, // عدد الزيارات المتبقية
             'price_paid' => 999.99, // السعر المدفوع
-            'is_active' => true
+            'is_active' => true,
+            'payment_method' => 'stripe', // اشتراك لمدة سنة
+            'payment_status' => 'paid', // عدد المكالمات المتبقية
+            'payment_session_id' => "wqdqdqw", // عدد الزيارات المتبقية
         ]);
     }
 }

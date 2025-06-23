@@ -9,6 +9,13 @@ class User_Subscription extends Model
 {
     use HasFactory;
 
+
+    const STATUS_PENDING = 0;
+    const STATUS_ACTIVE = 1;
+    const STATUS_EXPIRED = 2;
+    const STATUS_FAILED = 3;
+
+
     protected $fillable = [
         'user_id',
         'subscription_id',
@@ -17,7 +24,12 @@ class User_Subscription extends Model
         'remaining_calls',
         'remaining_visits',
         'price_paid',
-        'is_active'
+        'is_active',
+
+
+        'payment_method',
+        'payment_status',
+        'payment_session_id'
     ];
 
     protected $casts = [
@@ -40,5 +52,11 @@ class User_Subscription extends Model
     {
         return $query->where('is_active', true)
                     ->where('end_date', '>=', now());
+    }
+
+
+    public function payment()
+    {
+        return $this->hasOne(Payment::class);
     }
 }

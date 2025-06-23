@@ -7,10 +7,235 @@ use App\Models\Subscription;
 use App\Models\User_Subscription;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
-
+use App\Models\Payment;
+use Illuminate\Support\Facades\Log;
+use Stripe\Stripe;
+use Stripe\Checkout\Session;
 class UserSubscriptionService
 {
-    public function subscribeUser($user, $subscriptionId, $discountCode = null)
+
+public function subscribeUser($user, $subscriptionId, $discountCode = null)
+{
+    try {
+
+
+        return DB::transaction(function () use ($user, $subscriptionId, $discountCode) {
+            $subscription = Subscription::findOrFail($subscriptionId);
+
+            if (!$subscription->is_active) {
+                throw new \Exception('هذه الباقة غير متاحة حالياً');
+            }
+
+            // حساب السعر والخصم
+            $originalPrice = $subscription->price;
+            $finalPrice = $originalPrice;
+            $discountApplied = null;
+
+            if ($discountCode) {
+                $discountCoupon = DiscountCoupon::where('code', $discountCode)
+                    ->where('user_id', $user->id)
+                    ->where('is_used', false)
+                    ->where('expires_at', '>', now())
+                    ->first();
+
+                if ($discountCoupon) {
+                    $discountAmount = $originalPrice * ($discountCoupon->discount_percent / 100);
+                    $finalPrice = max(50, $originalPrice - $discountAmount); // الحد الأدنى 0.50 دولار
+                    $discountApplied = [
+                        'code' => $discountCoupon->code,
+                        'percent' => $discountCoupon->discount_percent,
+                        'amount' => $discountAmount
+                    ];
+                    $discountCoupon->update(['is_used' => true]);
+                }
+            }
+
+            // إنشاء اشتراك مؤقت
+            $userSubscription = User_Subscription::create([
+                'user_id' => $user->id,
+                'subscription_id' => $subscription->id,
+                'price_paid' => $finalPrice,
+                'start_date' => now(),
+                'end_date' => now()->addMonths($subscription->duration_months),
+                'remaining_calls' => 0,
+                'remaining_visits' => 0,
+                'is_active' => User_Subscription::STATUS_PENDING,
+                'payment_method' => 'stripe',
+                'payment_status' => 'pending'
+            ]);
+
+            // تكوين Stripe
+        $stripe = new \Stripe\StripeClient('sk_test_51RBEj04Dq9zBLTXeqiQ4guBjFvaGm6uL71I2YGMtgrYT5iUVcqsuaBtxWjl1URFSJaERjJOPo8XRRDLKHFwcyldQ00yuhZD4oL');
+
+            // إنشاء جلسة الدفع
+            $session =  $stripe->checkout->sessions->create([
+                'payment_method_types' => ['card'],
+                'line_items' => [[
+                    'price_data' => [
+                        'currency' => 'usd',
+                        'product_data' => [
+                            'name' => $subscription->name,
+                            'description' => $subscription->description,
+                        ],
+                        'unit_amount' => (int)($finalPrice * 100),
+                    ],
+                    'quantity' => 1,
+                ]],
+                'mode' => 'payment',
+                'success_url' => url("/api/payment/success/{$userSubscription->id}"),
+                'cancel_url' => url("/api/payment/cancel/{$userSubscription->id}"),
+                'customer_email' => $user->email,
+                'metadata' => [
+                    'user_id' => $user->id,
+                    'subscription_id' => $subscription->id,
+                    'user_subscription_id' => $userSubscription->id
+                ]
+            ]);
+
+            // تحديث بيانات الاشتراك
+            $userSubscription->update([
+                'payment_session_id' => $session->id,
+                'payment_details' => [
+                    'session_id' => $session->id,
+                    'payment_intent' => $session->payment_intent,
+                    'payment_status' => $session->payment_status
+                ]
+            ]);
+
+            // إنشاء سجل الدفع
+            Payment::create([
+                'user_id' => $user->id,
+                'user_subscription_id' => $userSubscription->id,
+                'payment_id' => $session->id,
+                'amount' => $finalPrice,
+                'currency' => 'usd',
+                'payment_method' => 'stripe',
+                'status' => 'pending',
+                'details' => $session->toArray()
+            ]);
+
+            return [
+                'success' => true,
+                'payment_url' => $session->url,
+                'subscription' => $userSubscription,
+                'discount' => $discountApplied
+            ];
+
+        });
+    } catch (\Illuminate\Database\QueryException $e) {
+        Log::error('Database Error: ' . $e->getMessage());
+        return [
+            'success' => false,
+            'message' => 'حدث خطأ في قاعدة البيانات',
+            'error' => $e->getMessage()
+        ];
+    } catch (\Stripe\Exception\ApiErrorException $e) {
+        Log::error('Stripe Error: ' . $e->getMessage());
+        return [
+            'success' => false,
+            'message' => 'حدث خطأ في نظام الدفع',
+            'error' => $e->getMessage()
+        ];
+    } catch (\Exception $e) {
+        Log::error('General Error: ' . $e->getMessage());
+        return [
+            'success' => false,
+            'message' => 'حدث خطأ غير متوقع',
+            'error' => $e->getMessage()
+        ];
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   /* public function subscribeUser($user, $subscriptionId, $discountCode = null)
     {
         return DB::transaction(function () use ($user, $subscriptionId, $discountCode) {
             $subscription = Subscription::findOrFail($subscriptionId);
@@ -95,7 +320,7 @@ class UserSubscriptionService
 
             return $response;
         });
-    }
+    }*/
 
     protected function deactivatePreviousSubscriptions($user)
     {

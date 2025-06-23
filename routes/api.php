@@ -18,6 +18,7 @@ use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\PillController;
+use App\Http\Controllers\PaymentController;
 
 /*
 |--------------------------------------------------------------------------
@@ -29,6 +30,9 @@ use App\Http\Controllers\PillController;
 | be assigned to the "api" middleware group. Make something great!
 |
 */
+
+
+
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
@@ -148,6 +152,10 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
 
 
 Route::middleware(['auth:sanctum'])->group(function () {
+    Route::get('/payment/success/{subscription}', [PaymentController::class, 'success']);
+
+    // إلغاء الدفع (سيتم استدعاؤها بعد العودة من Stripe)
+    Route::get('/payment/cancel/{subscription}', [PaymentController::class, 'cancel']);
     Route::prefix('user')->group(function () {
         Route::prefix('subscriptions')->group(function () {
             Route::get('fillter/', [SubscriptionController::class, 'index']);
@@ -248,4 +256,139 @@ Route::middleware(['auth:sanctum' , 'employee'])->group(function () {
         });
 
     });
+});
+
+
+
+
+Route::get('/test-stripe-keys', function() {
+    // 1. التحقق من وجود المفاتيح في ملف .env
+    $stripeKey = config('services.stripe.key');
+    $stripeSecret = config('services.stripe.secret');
+
+    if (empty($stripeKey) || empty($stripeSecret)) {
+        return response()->json([
+            'success' => false,
+            'message' => 'المفاتيح غير موجودة في ملف .env',
+            'keys_configured' => false
+        ], 500);
+    }
+
+    // 2. التحقق من صحة بادئات المفاتيح
+    $keyPrefix = substr($stripeKey, 0, 8);
+    $secretPrefix = substr($stripeSecret, 0, 8);
+
+    $validKeyPrefix = str_starts_with($stripeKey, 'pk_test_');
+    $validSecretPrefix = str_starts_with($stripeSecret, 'sk_test_');
+
+    if (!$validKeyPrefix || !$validSecretPrefix) {
+        return response()->json([
+            'success' => false,
+            'message' => 'بادئات المفاتيح غير صالحة',
+            'key_prefix' => $keyPrefix,
+            'secret_prefix' => $secretPrefix,
+            'expected_key_prefix' => 'pk_test_',
+            'expected_secret_prefix' => 'sk_test_'
+        ], 500);
+    }
+
+    // 3. اختبار اتصال Stripe الأساسي
+    try {
+        \Stripe\Stripe::setApiKey($stripeSecret);
+
+        // اختبار بسيط لاسترجاع معلومات الحساب
+        $account = \Stripe\Account::retrieve();
+
+        // اختبار إنشاء جلسة دفع بسيطة
+        $testSession = \Stripe\Checkout\Session::create([
+            'payment_method_types' => ['card'],
+            'line_items' => [[
+                'price_data' => [
+                    'currency' => 'usd',
+                    'product_data' => ['name' => 'Test Product'],
+                    'unit_amount' => 1000, // $10.00
+                ],
+                'quantity' => 1,
+            ]],
+            'mode' => 'payment',
+            'success_url' => 'https://example.com/success',
+            'cancel_url' => 'https://example.com/cancel',
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'المفاتيح تعمل بشكل صحيح',
+            'account_status' => [
+                'id' => $account->id,
+                'charges_enabled' => $account->charges_enabled,
+                'payouts_enabled' => $account->payouts_enabled,
+                'requirements' => $account->requirements
+            ],
+            'test_session' => [
+                'id' => $testSession->id,
+                'url' => $testSession->url,
+                'payment_status' => $testSession->payment_status
+            ],
+            'key_prefix' => $keyPrefix,
+            'secret_prefix' => $secretPrefix
+        ]);
+
+    } catch (\Stripe\Exception\AuthenticationException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'مفتاح Stripe السري غير صالح',
+            'error' => $e->getMessage(),
+            'stripe_code' => $e->getStripeCode(),
+            'http_status' => $e->getHttpStatus()
+        ], 401);
+    } catch (\Stripe\Exception\RateLimitException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'تم تجاوز حد الطلبات المسموح به',
+            'error' => $e->getMessage()
+        ], 429);
+    } catch (\Stripe\Exception\InvalidRequestException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'طلب غير صالح إلى Stripe',
+            'error' => $e->getMessage(),
+            'stripe_code' => $e->getStripeCode()
+        ], 400);
+    } catch (\Stripe\Exception\ApiErrorException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'خطأ في اتصال Stripe API',
+            'error' => $e->getMessage(),
+            'stripe_code' => $e->getStripeCode()
+        ], 500);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'خطأ غير متوقع',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+});
+
+Route::get('/check-stripe-account', function() {
+    try {
+        $stripe = new \Stripe\StripeClient(env('STRIPE_SECRET'));
+        $account = $stripe->accounts->retrieve();
+
+        return response()->json([
+            'status' => 'success',
+            'account' => [
+                'id' => $account->id,
+                'charges_enabled' => $account->charges_enabled,
+                'requirements' => $account->requirements,
+                'details_submitted' => $account->details_submitted
+            ]
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => 'error',
+            'message' => $e->getMessage(),
+            'solution' => 'يجب إكمال التحقق من الحساب في لوحة Stripe'
+        ], 500);
+    }
 });
