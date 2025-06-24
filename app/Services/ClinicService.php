@@ -30,6 +30,7 @@ class ClinicService
                 'email' => $data['email'],
                 'password' => Hash::make($data['password']),
                 'role' => 'user',
+                'otp' => '1',
                 'type' => 3,
             ]);
         }

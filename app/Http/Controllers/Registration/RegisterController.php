@@ -38,7 +38,7 @@ class RegisterController extends Controller
         // Pass the modified request data to the service
         $user = $this->userService->register($validatedData);
 
-      /*  if (isset($validatedData['email'])) {
+       if (isset($validatedData['email'])) {
             OtpHelper::sendOtpEmail($user->id);
         }/*elseif(isset($validatedData['phone']))
         {
@@ -96,7 +96,7 @@ class RegisterController extends Controller
     }
 
 
-    private function sendSms($phone, $otp)
+   /* private function sendSms($phone, $otp)
     {
         $account_sid = env('TWILIO_SID');
         $auth_token = env('TWILIO_TOKEN');
@@ -107,5 +107,5 @@ class RegisterController extends Controller
             'from' => $twilio_number,
             'body' => "Your OTP code is: $otp"
         ]);
-    }
+    }*/
 }

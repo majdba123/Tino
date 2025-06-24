@@ -6,8 +6,10 @@ use App\Models\Afiliate;
 use App\Models\User;
 use App\Models\Driver;
 use App\Models\vendor;
+use DateTime;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Cache; // Import Cache facade
+use Illuminate\Support\Facades\Date;
 
 class register
 {
@@ -73,11 +75,23 @@ class register
 
         // If OTP is valid, update the user's otp_verified column
         $user->otp = 1; // Assuming the column name is otp_verified
+        $user->email_verified_at = Date::now();
         $user->save(); // Save the changes to the database
 
         // Clear the OTP data from the cache after successful verification
         Cache::forget('otp_' . $user->id);
 
         return true; // Return true if OTP verification is successful
+    }
+
+    public function generateRandomPassword($length = 10)
+    {
+        $characters = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        $charactersLength = strlen($characters);
+        $randomPassword = '';
+        for ($i = 0; $i < $length; $i++) {
+            $randomPassword .= $characters[rand(0, $charactersLength - 1)];
+        }
+        return $randomPassword;
     }
 }

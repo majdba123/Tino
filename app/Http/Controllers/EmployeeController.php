@@ -25,6 +25,7 @@ class EmployeeController extends Controller
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
+            'otp' => '1',
             'type' => '2' // يمكنك إضافة نوع المستخدم
         ]);
 

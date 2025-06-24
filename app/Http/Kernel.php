@@ -21,6 +21,7 @@ class Kernel extends HttpKernel
         \Illuminate\Foundation\Http\Middleware\ValidatePostSize::class,
         \App\Http\Middleware\TrimStrings::class,
         \Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull::class,
+        \App\Http\Middleware\CheckOtpVerification::class,
     ];
 
     /**
@@ -67,6 +68,8 @@ class Kernel extends HttpKernel
         'admin' => \App\Http\Middleware\AdminMiddleware::class,
         'clinic' => \App\Http\Middleware\ClinicMiddleware::class,
         'employee' => \App\Http\Middleware\employeeMiddleware::class,
+        'otp' => \App\Http\Middleware\CheckOtpVerification::class,
+
 
     ];
 }
