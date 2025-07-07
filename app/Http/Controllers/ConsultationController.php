@@ -8,12 +8,14 @@ use App\Models\Clinic;
 use App\Models\Consultation;
 use App\Models\Order_Clinic;
 use App\Models\Pet;
+use App\Models\User_Notification;
 use App\Models\UserSubscription;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use App\Models\User_Subscription;
 use Illuminate\Support\Facades\Validator;
+use App\Events\chat1;
 
 class ConsultationController extends Controller
 {
@@ -153,6 +155,15 @@ class ConsultationController extends Controller
         if ($operation === 'call') {
             $consultation->status = "complete";
             $responseData['message'] = 'تم تحويل الاستشارة إلى مكالمة بنجاح';
+
+
+        $message = User_Notification::create([
+            'user_id' => $consultation->user_id,
+            'massage' => $responseData['message'],
+        ]);
+
+        broadcast(new chat1($message))->toOthers();
+
         }
         elseif (in_array($operation, ['outside', 'inside'])) {
             $clinic = Clinic::find(request('clinic_id'));
@@ -198,6 +209,14 @@ class ConsultationController extends Controller
                 $consultation->status = "complete";
                 $responseData['message'] = 'تم تحويل الاستشارة إلى عيادة خارجية بنجاح';
                 $responseData['clinic'] = $clinic;
+
+                $message = User_Notification::create([
+                'user_id' => $consultation->user_id,
+                'massage' => $responseData['message'],
+                ]);
+
+                broadcast(new chat1($message))->toOthers();
+
             }
             else { // حالة inside
                 if ($clinic->type !== 'integrated') {
@@ -209,6 +228,13 @@ class ConsultationController extends Controller
 
                 $consultation->status = "reviewed";
                 $responseData['message'] = 'تم تحويل الاستشارة إلى عيادة داخلية بنجاح ويجب مراجعتها';
+
+                $message = User_Notification::create([
+                'user_id' => $consultation->user_id,
+                'massage' => $responseData['message'],
+                ]);
+
+                broadcast(new chat1($message))->toOthers();
 
                 // إنشاء سجل Order_Clinic في حالة inside
                 Order_Clinic::create([
