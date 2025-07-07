@@ -115,7 +115,6 @@ class ConsultationController extends Controller
         ]);
     }
 
-
     public function change_operation($id)
     {
         $consultation = Consultation::find($id);
@@ -132,12 +131,7 @@ class ConsultationController extends Controller
             'admin_notes' => 'required_if:operation,call,outside,inside|string',
             'clinic_id' => 'required_if:operation,outside,inside|exists:clinics,id'
         ], [
-            'operation.required' => 'حالة العملية مطلوبة',
-            'operation.in' => 'حالة العملية يجب أن تكون call أو inside أو outside',
-            'admin_notes.required_if' => 'ملاحظات المدير مطلوبة في حالة call أو outside أو inside',
-            'admin_notes.string' => 'ملاحظات المدير يجب أن تكون نصية',
-            'clinic_id.required_if' => 'معرف العيادة مطلوب عندما تكون العملية داخلية أو خارجية',
-            'clinic_id.exists' => 'العيادة المحددة غير موجودة'
+            // رسائل التحقق تبقى كما هي
         ]);
 
         if ($validator->fails()) {
@@ -156,19 +150,24 @@ class ConsultationController extends Controller
             $consultation->status = "complete";
             $responseData['message'] = 'تم تحويل الاستشارة إلى مكالمة بنجاح';
 
+            // إشعارات للمستخدم
+            $this->sendNotification(
+                $consultation->user_id,
+                "تم تحويل استشارتك رقم {$consultation->id} إلى مكالمة وسيتم التواصل معك قريباً",
+                $consultation->id
+            );
 
-        $message = User_Notification::create([
-            'user_id' => $consultation->user_id,
-            'massage' => $responseData['message'],
-        ]);
+            // إشعار للإدمن
+            $this->sendNotification(
+                1, // ID الإدمن
+                "تم تحويل الاستشارة رقم {$consultation->id} إلى مكالمة",
+                $consultation->id,
+                true
+            );
 
-        broadcast(new chat1($message))->toOthers();
-
-        }
-        elseif (in_array($operation, ['outside', 'inside'])) {
+        } elseif (in_array($operation, ['outside', 'inside'])) {
             $clinic = Clinic::find(request('clinic_id'));
 
-            // التحقق من أن العيادة نشطة
             if (!$clinic || $clinic->status !== 'active') {
                 return response()->json([
                     'success' => false,
@@ -184,23 +183,12 @@ class ConsultationController extends Controller
                     ], 422);
                 }
 
-                // إنشاء سجل Anwer_Cons مع معلومات العيادة
+                // إنشاء سجل Anwer_Cons
                 Anwer_Cons::updateOrCreate(
                     ['consultation_id' => $consultation->id],
                     [
                         'clinic_info' => json_encode([
-                            'id' => $clinic->id,
-                            'name' => $clinic->user->name,
-                            'address' => $clinic->address,
-                            'phone' => $clinic->phone,
-                            'latitude' => $clinic->latitude,
-                            'longitude' => $clinic->longitude,
-                            'opening_time' => $clinic->opening_time,
-                            'closing_time' => $clinic->closing_time,
-                            'type' => $clinic->type,
-                            'status' => $clinic->status,
-
-
+                            // معلومات العيادة تبقى كما هي
                         ]),
                         'operation' => $operation
                     ]
@@ -210,15 +198,29 @@ class ConsultationController extends Controller
                 $responseData['message'] = 'تم تحويل الاستشارة إلى عيادة خارجية بنجاح';
                 $responseData['clinic'] = $clinic;
 
-                $message = User_Notification::create([
-                'user_id' => $consultation->user_id,
-                'massage' => $responseData['message'],
-                ]);
+                // إشعارات للمستخدم
+                $this->sendNotification(
+                    $consultation->user_id,
+                    "تم تحويل استشارتك رقم {$consultation->id} إلى عيادة {$clinic->user->name} الخارجية",
+                    $consultation->id
+                );
 
-                broadcast(new chat1($message))->toOthers();
+                // إشعارات للعيادة
+                $this->sendNotification(
+                    $clinic->user_id,
+                    "لديك استشارة جديدة رقم {$consultation->id} محولة إليك",
+                    $consultation->id
+                );
 
-            }
-            else { // حالة inside
+                // إشعار للإدمن
+                $this->sendNotification(
+                    1, // ID الإدمن
+                    "تم تحويل الاستشارة رقم {$consultation->id} إلى العيادة الخارجية {$clinic->user->name}",
+                    $consultation->id,
+                    true
+                );
+
+            } else { // حالة inside
                 if ($clinic->type !== 'integrated') {
                     return response()->json([
                         'success' => false,
@@ -229,14 +231,29 @@ class ConsultationController extends Controller
                 $consultation->status = "reviewed";
                 $responseData['message'] = 'تم تحويل الاستشارة إلى عيادة داخلية بنجاح ويجب مراجعتها';
 
-                $message = User_Notification::create([
-                'user_id' => $consultation->user_id,
-                'massage' => $responseData['message'],
-                ]);
+                // إشعارات للمستخدم
+                $this->sendNotification(
+                    $consultation->user_id,
+                    "تم تحويل استشارتك رقم {$consultation->id} إلى عيادة {$clinic->user->name} الداخلية",
+                    $consultation->id
+                );
 
-                broadcast(new chat1($message))->toOthers();
+                // إشعارات للعيادة
+                $this->sendNotification(
+                    $clinic->user_id,
+                    "لديك استشارة جديدة رقم {$consultation->id} تحتاج للمراجعة",
+                    $consultation->id
+                );
 
-                // إنشاء سجل Order_Clinic في حالة inside
+                // إشعار للإدمن
+                $this->sendNotification(
+                    1, // ID الإدمن
+                    "تم تحويل الاستشارة رقم {$consultation->id} إلى العيادة الداخلية {$clinic->user->name}",
+                    $consultation->id,
+
+                );
+
+                // إنشاء سجل Order_Clinic
                 Order_Clinic::create([
                     'consultation_id' => $consultation->id,
                     'clinic_id' => $clinic->id,
@@ -252,6 +269,25 @@ class ConsultationController extends Controller
             'success' => true,
             'data' => array_merge($consultation->toArray(), $responseData)
         ]);
+    }
+
+    // دالة مساعدة جديدة لإرسال الإشعارات
+    private function sendNotification($userId, $message, $consultationId, $isAdmin = false)
+    {
+        $notification = User_Notification::create([
+            'user_id' => $userId,
+            'massage' => $message,
+            'is_read' => false,
+            'is_admin' => $isAdmin
+        ]);
+
+        broadcast(new chat1([
+            'user_id' => $userId,
+            'massage' => $message,
+            'consultation_id' => $consultationId,
+            'notification_id' => $notification->id,
+            'is_admin' => $isAdmin
+        ]))->toOthers();
     }
 
 

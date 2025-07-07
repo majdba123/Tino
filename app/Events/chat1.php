@@ -31,7 +31,7 @@ class chat1  implements ShouldBroadcast
     */
    public function broadcastOn(): array
    {
-       return ['chat-private-channel-' . $this->message->user_id];
+       return ['chat-private-channel-' . $this->message['user_id']];
 
    }
 
@@ -41,3 +41,4 @@ class chat1  implements ShouldBroadcast
        return 'Private_chat';
    }
 }
+
