@@ -65,7 +65,7 @@ public function subscribeUser($user, $subscriptionId, $discountCode = null)
             ]);
 
             // تكوين Stripe
-        $stripe = new \Stripe\StripeClient('sk_test_51RBEj04Dq9zBLTXeqiQ4guBjFvaGm6uL71I2YGMtgrYT5iUVcqsuaBtxWjl1URFSJaERjJOPo8XRRDLKHFwcyldQ00yuhZD4oL');
+        $stripe = new \Stripe\StripeClient(env('STRIPE_SECRET'));
 
             // إنشاء جلسة الدفع
             $session =  $stripe->checkout->sessions->create([
@@ -118,7 +118,9 @@ public function subscribeUser($user, $subscriptionId, $discountCode = null)
                 'success' => true,
                 'payment_url' => $session->url,
                 'subscription' => $userSubscription,
-                'discount' => $discountApplied
+                'discount' => $discountApplied,
+                'message' => 'ssss'
+
             ];
 
         });

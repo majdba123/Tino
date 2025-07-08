@@ -29,8 +29,8 @@ class UserSubscriptionController extends Controller
 
         return response()->json([
             'success' => $subscription['success'],
-            'data' => $subscription['data'] ?? null,
-            'message' => $subscription['message']
+            'payment_url' => $subscription['payment_url'] ?? null,
+            'message' => $subscription['message'],
         ], $subscription['success'] ? 201 : 400);
     }
     public function activeSubscription($user_id): JsonResponse

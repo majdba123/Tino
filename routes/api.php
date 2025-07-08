@@ -172,13 +172,16 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
 ###########################################################################################################################################
 ###########################################################################################################################################
 ###########################################################################################################################################
+Route::get('/payment/success/{subscription}', [PaymentController::class, 'success']);
+Route::get('/payment/cancel/{subscription}', [PaymentController::class, 'cancel']);
+
+
 
 
 Route::middleware(['auth:sanctum'])->group(function () {
-    Route::get('/payment/success/{subscription}', [PaymentController::class, 'success']);
 
-    // إلغاء الدفع (سيتم استدعاؤها بعد العودة من Stripe)
-    Route::get('/payment/cancel/{subscription}', [PaymentController::class, 'cancel'])->middleware('otp');
+
+
     Route::prefix('user')->group(function () {
         Route::prefix('subscriptions')->group(function () {
             Route::get('fillter/', [SubscriptionController::class, 'index']);

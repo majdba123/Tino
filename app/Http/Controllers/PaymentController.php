@@ -14,30 +14,31 @@ class PaymentController extends Controller
 {
     public function success($subscriptionId)
     {
+        //dd(request()->all());
         try {
             $subscription = User_Subscription::with('subscription')->findOrFail($subscriptionId);
 
             // التحقق من أن الاشتراك مملوك للمستخدم الحالي
-            if ($subscription->user_id != auth()->id()) {
+      /*      if ($subscription->user_id != auth()->id()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'غير مصرح بالوصول إلى هذا الاشتراك'
-                ], 403);
-            }
+                ], 403)->header('Content-Type', 'application/json');
+            }*/
 
             // إذا كان الاشتراك مفعلاً مسبقاً
             if ($subscription->is_active === User_Subscription::STATUS_ACTIVE) {
                 return response()->json([
                     'success' => true,
                     'message' => 'الاشتراك مفعّل مسبقاً'
-                ]);
+                ])->header('Content-Type', 'application/json');
             }
 
             Stripe::setApiKey(env('STRIPE_SECRET'));
 
             $session = Session::retrieve($subscription->payment_session_id);
 
-            if ($session->payment_status === 'paid') {
+            if ($session->payment_status == 'paid') {
                 $this->activateSubscription($subscription, $session);
 
                 return response()->json([
@@ -49,7 +50,7 @@ class PaymentController extends Controller
                         'start_date' => $subscription->start_date,
                         'end_date' => $subscription->end_date
                     ]
-                ]);
+                ])->header('Content-Type', 'application/json');
             }
 
             return response()->json([
