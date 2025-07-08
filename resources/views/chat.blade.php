@@ -16,12 +16,12 @@
             authEndpoint: '/pusher/auth', // updated endpoint
             auth: {
                 params: {
-                    userId: '{{ auth()->id() }}' // pass the user ID to the auth endpoint
+                    userId: '2' // pass the user ID to the auth endpoint
                 }
             }
         });
 
-        var channel = pusher.subscribe('chat-private-channel-1');
+        var channel = pusher.subscribe('chat-private-channel-2');
         channel.bind('Private_chat', function(data) {
             alert(JSON.stringify(data));
         });
@@ -32,9 +32,9 @@
 
 <body>
     <h1> user Test</h1>
-    <h1>User ID:{{ auth()->user()->id }}</h1>
+    <h1>User ID:2</h1>
     <p>
-        Try Notification an event to channel <code>user.{{ auth()->user()->id }}</code>
+        Try Notification an event to channel <code>user.2</code>
         with event name <code>my-event</code>.
     </p>
     <div id="notifications">

@@ -11,7 +11,7 @@ class User_Notification extends Model
         protected $fillable = [
         'user_id',
         'is_admin',
-        'massage',
+        'message',
         'is_read',
 
     ];

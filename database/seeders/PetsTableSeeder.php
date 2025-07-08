@@ -23,7 +23,7 @@ class PetsTableSeeder extends Seeder
             'breed' => 'ssas',
             'health_status' => 'excellent',
             'status' => 'active',
-            'user_id' => 1 // ID المستخدم الإداري
+            'user_id' => 2 // ID المستخدم الإداري
         ]);
 
         Pet::create([
@@ -35,7 +35,7 @@ class PetsTableSeeder extends Seeder
             'breed' => 'ssas',
             'health_status' => 'excellent',
             'status' => 'active',
-            'user_id' => 1 // ID المستخدم الإداري
+            'user_id' => 2 // ID المستخدم الإداري
         ]);
     }
 }

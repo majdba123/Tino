@@ -7,6 +7,8 @@ use App\Models\Clinic;
 use App\Models\MedicalRecord;
 use App\Models\Order_Clinic;
 use App\Models\Pill;
+use App\Models\User_Notification;
+use App\Events\chat1;
 use App\Models\User_Review;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -209,21 +211,21 @@ class OrderClinicController extends Controller
     // إنشاء الإشعارات في قاعدة البيانات
     $userNotification = User_Notification::create([
         'user_id' => $order->consultation->user_id,
-        'massage' => $userMessage,
+        'message' => $userMessage,
         'is_read' => false,
         'is_admin' => false
     ]);
 
     $clinicNotification = User_Notification::create([
         'user_id' => $clinic->user_id,
-        'massage' => $clinicMessage,
+        'message' => $clinicMessage,
         'is_read' => false,
         'is_admin' => false
     ]);
 
     $adminNotification = User_Notification::create([
         'user_id' => 1, // ID الإدمن
-        'massage' => $adminMessage,
+        'message' => $adminMessage,
         'is_read' => false,
         'is_admin' => false
     ]);
@@ -232,7 +234,7 @@ class OrderClinicController extends Controller
     // للمستخدم
     broadcast(new chat1([
         'user_id' => $order->consultation->user_id,
-        'massage' => $userMessage,
+        'message' => $userMessage,
         'consultation_id' => $consultationId,
         'notification_id' => $userNotification->id
     ]))->toOthers();
@@ -240,7 +242,7 @@ class OrderClinicController extends Controller
     // للعيادة
     broadcast(new chat1([
         'user_id' => $clinic->user_id,
-        'massage' => $clinicMessage,
+        'message' => $clinicMessage,
         'consultation_id' => $consultationId,
         'notification_id' => $clinicNotification->id
     ]))->toOthers();
@@ -248,7 +250,7 @@ class OrderClinicController extends Controller
     // للإدمن
     broadcast(new chat1([
         'user_id' => 1,
-        'massage' => $adminMessage,
+        'message' => $adminMessage,
         'consultation_id' => $consultationId,
         'notification_id' => $adminNotification->id
     ]))->toOthers();
@@ -371,7 +373,7 @@ public function checkAndUpdateOrderStatus(Request $request)
         // إشعار للمستخدم
         User_Notification::create([
             'user_id' => $order->consultation->user_id,
-            'massage' => $userMessage,
+            'message' => $userMessage,
             'is_read' => false,
             'is_admin' => false
         ]),
@@ -379,7 +381,7 @@ public function checkAndUpdateOrderStatus(Request $request)
         // إشعار للعيادة
         User_Notification::create([
             'user_id' => $order->clinic->user_id,
-            'massage' => $clinicMessage,
+            'message' => $clinicMessage,
             'is_read' => false,
             'is_admin' => false
         ]),
@@ -387,7 +389,7 @@ public function checkAndUpdateOrderStatus(Request $request)
         // إشعار للإدمن
         User_Notification::create([
             'user_id' => 1, // ID الإدمن
-            'massage' => $adminMessage,
+            'message' => $adminMessage,
             'is_read' => false,
             'is_admin' => false
         ])
@@ -395,9 +397,9 @@ public function checkAndUpdateOrderStatus(Request $request)
 
     // بث الإشعارات عبر WebSocket
     foreach ($notifications as $notification) {
-        broadcast(new ChatNotification([
+        broadcast(new chat1([
             'user_id' => $notification->user_id,
-            'massage' => $notification->massage,
+            'message' => $notification->message,
             'consultation_id' => $order->consultation_id,
             'notification_id' => $notification->id,
             'is_admin' => $notification->is_admin
@@ -570,7 +572,7 @@ public function completeOrder(Request $request)
             // إشعار للمستخدم
             User_Notification::create([
                 'user_id' => $user->id,
-                'massage' => $userMessage,
+                'message' => $userMessage,
                 'is_read' => false,
                 'is_admin' => false
             ]),
@@ -578,7 +580,7 @@ public function completeOrder(Request $request)
             // إشعار للعيادة
             User_Notification::create([
                 'user_id' => $clinic->user_id,
-                'massage' => $clinicMessage,
+                'message' => $clinicMessage,
                 'is_read' => false,
                 'is_admin' => false
             ]),
@@ -586,7 +588,7 @@ public function completeOrder(Request $request)
             // إشعار للإدمن
             User_Notification::create([
                 'user_id' => 1, // ID الإدمن
-                'massage' => $adminMessage,
+                'message' => $adminMessage,
                 'is_read' => false,
                 'is_admin' =>false
             ])
@@ -594,9 +596,9 @@ public function completeOrder(Request $request)
 
         // بث الإشعارات عبر WebSocket
         foreach ($notifications as $notification) {
-            broadcast(new ChatNotification([
+            broadcast(new chat1([
                 'user_id' => $notification->user_id,
-                'massage' => $notification->massage,
+                'message' => $notification->message,
                 'consultation_id' => $order->consultation_id,
                 'notification_id' => $notification->id,
                 'is_admin' => $notification->is_admin

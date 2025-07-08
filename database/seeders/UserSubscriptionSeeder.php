@@ -15,7 +15,7 @@ class UserSubscriptionSeeder extends Seeder
     public function run()
     {
         User_Subscription::create([
-            'user_id' => 1, // ID المستخدم الإداري
+            'user_id' => 2, // ID المستخدم الإداري
             'subscription_id' => 1, // افترضنا أن لديك باقة اشتراك بـ ID 1
             'start_date' => Carbon::now(),
             'end_date' => Carbon::now()->addYear(), // اشتراك لمدة سنة

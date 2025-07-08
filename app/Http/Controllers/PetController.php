@@ -7,6 +7,7 @@ use App\Models\DiscountCoupon;
 use App\Http\Requests\PetRequest;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Auth;
 
 class PetController extends Controller
 {
@@ -78,9 +79,9 @@ class PetController extends Controller
 public function updatePet(PetRequest $request, $id)
 {
 
-
+        $user=Auth::user();
         // 2. البحث عن الحيوان والتحقق من ملكيته للمستخدم
-        $pet = Pet::where('user_id', auth()->id())->find($id);
+        $pet = Pet::where('user_id', $user->id)->find($id);
 
         if (!$pet) {
             return response()->json([

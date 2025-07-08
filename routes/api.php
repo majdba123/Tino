@@ -21,6 +21,9 @@ use App\Http\Controllers\PillController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\UserReviewController;
 use App\Http\Controllers\ForgetPasswordController;
+use App\Http\Controllers\ChatController;
+use App\Http\Controllers\AdminController;
+
 use App\Helpers\OtpHelper;
 
 use App\Models\User;
@@ -72,6 +75,11 @@ Route::group(['middleware' => ['web']], function () {
 
 Route::middleware(['auth:sanctum', 'admin'])->group(function () {
     Route::prefix('admin')->group(function () {
+
+        Route::get('/dashboard', [AdminController::class, 'getDashboardStats']);
+
+        Route::post('notification/sendAdminNotification', [ChatController::class, 'sendAdminNotification']);
+
         Route::prefix('subscriptions')->group(function () {
             Route::get('fillter/', [SubscriptionController::class, 'index']);
             Route::get('get_all_user_subscriped/', [SubscriptionController::class, 'get_all_user_subscriped']);
@@ -287,6 +295,17 @@ Route::middleware(['auth:sanctum' , 'employee'])->group(function () {
 });
 
 
+Route::middleware(['auth:sanctum'])->group(function () {
+
+    Route::prefix('notification')->group(function () {
+
+        Route::get('get_all', [ChatController::class, 'getUserNotifications']);
+        Route::post('mark_read', [ChatController::class, 'markAllAsRead']);
+
+
+
+    });
+});
 
 
 

@@ -23,6 +23,15 @@ Route::get('/', function () {
 });
 
 
+Route::get('/private', function () {
+    return view('chat');
+});
+
+
+Route::get('/public', function () {
+    return view('notification');
+});
+
 
 
 

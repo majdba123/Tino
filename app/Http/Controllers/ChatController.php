@@ -7,6 +7,8 @@ use App\Models\User;
 use App\Models\User_Notification;
 use Illuminate\Http\Request;
 use App\Events\chat1;
+use App\Events\NotificatinEvent;
+use Illuminate\Support\Facades\Auth;
 
 class ChatController extends Controller
 {
@@ -30,6 +32,8 @@ class ChatController extends Controller
     }
 
 
+
+
     public function markAllAsRead()
     {
         $user = Auth::user();
@@ -44,6 +48,31 @@ class ChatController extends Controller
     }
 
 
+    public function sendAdminNotification(Request $request)
+    {
 
+
+        $validatedData = $request->validate([
+            'message' => 'required|string',
+        ]);
+
+        // الحصول على جميع المستخدمين
+        $user = Auth::user();
+
+
+        User_Notification::create([
+                'user_id' => $user->id,
+                'is_admin' => true,
+                'message' => $validatedData['message'],
+                'is_read' => false,
+            ]);
+
+        event(new NotificatinEvent($validatedData['message']));
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تم إرسال الإشعار لجميع المستخدمين بنجاح'
+        ]);
+    }
 
 }

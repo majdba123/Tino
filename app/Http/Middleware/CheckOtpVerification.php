@@ -18,8 +18,9 @@ class CheckOtpVerification
     {
         // Check if the user is authenticated
         if (Auth::check()) {
+            $user=Auth::user();
             // Check if the user's OTP column is not verified (e.g., `otp != 1`)
-            if (Auth::user()->otp != 1) {
+            if ($user->otp != 1) {
                 return response()->json(['message' => 'You should verify your email first.'], 403);
                 // Or redirect (if using web routes):
                 // return redirect()->route('verification.notice')->with('error', 'You should verify your email first.');

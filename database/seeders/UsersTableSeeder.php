@@ -14,21 +14,30 @@ class UsersTableSeeder extends Seeder
      */
     public function run()
     {
-        User::create([
-            'id' => 1,
-            'name' => 'User',
-            'email' => 'user@example.com',
-            'password' => Hash::make('password'),
-            'type' => 0,
-        ]);
 
         User::create([
-            'id' => 2,
+            'id' => 1,
             'name' => 'Admin',
             'email' => 'admin@example.com',
             'password' => Hash::make('password'),
             'type' => "admin",
+                        'email_verified_at' => now(), // إضافة هذا السطر
+
         ]);
+
+
+
+        User::create([
+            'id' => 2,
+            'name' => 'User',
+            'email' => 'user@example.com',
+            'password' => Hash::make('password'),
+            'type' => 0,
+                        'email_verified_at' => now(), // إضافة هذا السطر
+
+        ]);
+
+
 
         User::create([
             'id' => 3,
@@ -36,6 +45,8 @@ class UsersTableSeeder extends Seeder
             'email' => 'clinic@example.com',
             'password' => Hash::make('password'),
             'type' => 3,
+                        'email_verified_at' => now(), // إضافة هذا السطر
+
         ]);
 
         User::create([
@@ -44,6 +55,8 @@ class UsersTableSeeder extends Seeder
             'email' => 'clinic1@example.com',
             'password' => Hash::make('password'),
             'type' => 3,
+                        'email_verified_at' => now(), // إضافة هذا السطر
+
         ]);
 
 

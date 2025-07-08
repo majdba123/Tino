@@ -276,14 +276,14 @@ class ConsultationController extends Controller
     {
         $notification = User_Notification::create([
             'user_id' => $userId,
-            'massage' => $message,
+            'message' => $message,
             'is_read' => false,
             'is_admin' => $isAdmin
         ]);
 
         broadcast(new chat1([
             'user_id' => $userId,
-            'massage' => $message,
+            'message' => $message,
             'consultation_id' => $consultationId,
             'notification_id' => $notification->id,
             'is_admin' => $isAdmin
