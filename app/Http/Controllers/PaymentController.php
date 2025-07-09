@@ -9,22 +9,30 @@ use Stripe\Stripe;
 use Stripe\Webhook;
 use Stripe\Checkout\Session;
 use Illuminate\Support\Facades\Log;
+use PayPal\Rest\ApiContext;
+use PayPal\Auth\OAuthTokenCredential;
+use PayPal\Api\PaymentExecution;
 
 class PaymentController extends Controller
 {
+    protected $paypalContext;
+
+    public function __construct()
+    {
+        // تهيئة سياق PayPal
+        $this->paypalContext = new ApiContext(
+            new OAuthTokenCredential(
+                env('PAYPAL_MODE') === 'sandbox' ? env('PAYPAL_SANDBOX_CLIENT_ID') : env('PAYPAL_LIVE_CLIENT_ID'),
+                env('PAYPAL_MODE') === 'sandbox' ? env('PAYPAL_SANDBOX_CLIENT_SECRET') : env('PAYPAL_LIVE_CLIENT_SECRET')
+            )
+        );
+        $this->paypalContext->setConfig(['mode' => env('PAYPAL_MODE', 'sandbox')]);
+    }
+
     public function success($subscriptionId)
     {
-        //dd(request()->all());
         try {
             $subscription = User_Subscription::with('subscription')->findOrFail($subscriptionId);
-
-            // التحقق من أن الاشتراك مملوك للمستخدم الحالي
-      /*      if ($subscription->user_id != auth()->id()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'غير مصرح بالوصول إلى هذا الاشتراك'
-                ], 403)->header('Content-Type', 'application/json');
-            }*/
 
             // إذا كان الاشتراك مفعلاً مسبقاً
             if ($subscription->is_active === User_Subscription::STATUS_ACTIVE) {
@@ -34,23 +42,32 @@ class PaymentController extends Controller
                 ])->header('Content-Type', 'application/json');
             }
 
-            Stripe::setApiKey(env('STRIPE_SECRET'));
+            // معالجة الدفع حسب طريقة الدفع
+            if ($subscription->payment_method == 'stripe') {
+                Stripe::setApiKey(env('STRIPE_SECRET'));
+                $session = Session::retrieve($subscription->payment_session_id);
 
-            $session = Session::retrieve($subscription->payment_session_id);
+                if ($session->payment_status == 'paid') {
+                    $this->activateSubscription($subscription, $session);
+                    return $this->successResponse($subscription, 'تم تفعيل الاشتراك بنجاح');
+                }
+            } elseif ($subscription->payment_method == 'paypal') {
+                if (request('paymentId') && request('PayerID')) {
+                    $payment = \PayPal\Api\Payment::get(request('paymentId'), $this->paypalContext);
+                    $execution = new PaymentExecution();
+                    $execution->setPayerId(request('PayerID'));
 
-            if ($session->payment_status == 'paid') {
-                $this->activateSubscription($subscription, $session);
+                    $result = $payment->execute($execution, $this->paypalContext);
 
-                return response()->json([
-                    'success' => true,
-                    'message' => 'تم تفعيل الاشتراك بنجاح',
-                    'data' => [
-                        'subscription' => $subscription,
-                        'payment_status' => 'paid',
-                        'start_date' => $subscription->start_date,
-                        'end_date' => $subscription->end_date
-                    ]
-                ])->header('Content-Type', 'application/json');
+                    if ($result->getState() === 'approved') {
+                        $this->activateSubscription($subscription, [
+                            'id' => $payment->getId(),
+                            'state' => 'approved',
+                            'payer' => $payment->getPayer()
+                        ]);
+                        return $this->successResponse($subscription, 'تم تفعيل الاشتراك بنجاح عبر PayPal');
+                    }
+                }
             }
 
             return response()->json([
@@ -74,22 +91,23 @@ class PaymentController extends Controller
         try {
             $subscription = User_Subscription::findOrFail($subscriptionId);
 
-            // التحقق من أن الاشتراك مملوك للمستخدم الحالي
-            if ($subscription->user_id != auth()->id()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'غير مصرح بالوصول إلى هذا الاشتراك'
-                ], 403);
-            }
 
-            $subscription->update([
+
+            $updateData = [
                 'is_active' => User_Subscription::STATUS_FAILED,
                 'payment_status' => 'canceled',
                 'payment_details' => array_merge(
                     (array)$subscription->payment_details,
                     ['cancelled_at' => now()]
                 )
-            ]);
+            ];
+
+            // إذا كان PayPal، نضيف معلومات إضافية
+            if ($subscription->payment_method === 'paypal') {
+                $updateData['payment_details']['paypal_cancel'] = true;
+            }
+
+            $subscription->update($updateData);
 
             Payment::where('payment_id', $subscription->payment_session_id)->update([
                 'status' => Payment::STATUS_FAILED,
@@ -129,6 +147,23 @@ class PaymentController extends Controller
                 ], 403);
             }
 
+            // إذا كان PayPal ولم يتم التحقق بعد، يمكننا التحقق من حالة الدفع
+            if ($subscription->payment_method === 'paypal' && $subscription->is_active === User_Subscription::STATUS_PENDING) {
+                try {
+                    $payment = \PayPal\Api\Payment::get($subscription->payment_session_id, $this->paypalContext);
+                    if ($payment->getState() === 'approved') {
+                        $this->activateSubscription($subscription, [
+                            'id' => $payment->getId(),
+                            'state' => 'approved',
+                            'payer' => $payment->getPayer()
+                        ]);
+                        $subscription->refresh();
+                    }
+                } catch (\Exception $e) {
+                    Log::error('PayPal status check error: ' . $e->getMessage());
+                }
+            }
+
             return response()->json([
                 'success' => true,
                 'data' => [
@@ -136,7 +171,8 @@ class PaymentController extends Controller
                     'payment_status' => $subscription->payment_status,
                     'start_date' => $subscription->start_date,
                     'end_date' => $subscription->end_date,
-                    'can_retry' => $subscription->is_active == User_Subscription::STATUS_FAILED
+                    'can_retry' => $subscription->is_active == User_Subscription::STATUS_FAILED,
+                    'payment_method' => $subscription->payment_method
                 ]
             ]);
 
@@ -152,6 +188,18 @@ class PaymentController extends Controller
 
     public function handleWebhook(Request $request)
     {
+        // تحديد نوع الويب هوك (Stripe أو PayPal)
+        if ($request->has('event_type') && $request->has('resource')) {
+            // معالجة ويب هوك PayPal
+            return $this->handlePayPalWebhook($request);
+        } else {
+            // معالجة ويب هوك Stripe
+            return $this->handleStripeWebhook($request);
+        }
+    }
+
+    protected function handleStripeWebhook(Request $request)
+    {
         $payload = $request->getContent();
         $sig_header = $request->header('Stripe-Signature');
         $endpoint_secret = env('STRIPE_WEBHOOK_SECRET');
@@ -161,7 +209,7 @@ class PaymentController extends Controller
                 $payload, $sig_header, $endpoint_secret
             );
         } catch (\Exception $e) {
-            Log::error('Webhook signature verification failed: ' . $e->getMessage());
+            Log::error('Stripe webhook signature verification failed: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid webhook signature',
@@ -188,21 +236,73 @@ class PaymentController extends Controller
         return response()->json(['success' => true]);
     }
 
-    protected function activateSubscription(User_Subscription $subscription, $session)
+    protected function handlePayPalWebhook(Request $request)
     {
-        $subscription->update([
+        $eventType = $request->input('event_type');
+        $resource = $request->input('resource');
+
+        if (!$eventType || !$resource) {
+            return response()->json(['success' => false, 'message' => 'Invalid PayPal webhook data'], 400);
+        }
+
+        $paymentId = $resource['id'] ?? null;
+        if (!$paymentId) return response()->json(['success' => false, 'message' => 'No payment ID'], 400);
+
+        $subscription = User_Subscription::where('payment_session_id', $paymentId)->first();
+        if (!$subscription) return response()->json(['success' => false, 'message' => 'Subscription not found'], 404);
+
+        switch ($eventType) {
+            case 'PAYMENT.SALE.COMPLETED':
+                if ($subscription->is_active == User_Subscription::STATUS_PENDING) {
+                    $this->activateSubscription($subscription, $resource);
+                }
+                break;
+
+            case 'PAYMENT.SALE.DENIED':
+            case 'PAYMENT.SALE.FAILED':
+                $subscription->update([
+                    'is_active' => User_Subscription::STATUS_FAILED,
+                    'payment_status' => 'failed',
+                    'payment_details' => array_merge(
+                        (array)$subscription->payment_details,
+                        ['failed_at' => now(), 'reason' => $request->input('summary', 'unknown')]
+                    )
+                ]);
+
+                Payment::where('payment_id', $paymentId)->update([
+                    'status' => Payment::STATUS_FAILED,
+                    'details' => ['reason' => 'payment_failed']
+                ]);
+                break;
+
+            case 'PAYMENT.SALE.REFUNDED':
+                $subscription->update([
+                    'is_active' => User_Subscription::STATUS_FAILED,
+                    'payment_status' => 'refunded'
+                ]);
+                break;
+        }
+
+        return response()->json(['success' => true]);
+    }
+
+    protected function activateSubscription(User_Subscription $subscription, $paymentData)
+    {
+        $updateData = [
             'is_active' => User_Subscription::STATUS_ACTIVE,
             'payment_status' => 'paid',
             'start_date' => now(),
             'end_date' => now()->addMonths($subscription->subscription->duration_months),
-            'payment_details' => $session->toArray()
-        ]);
+            'payment_details' => is_array($paymentData) ? $paymentData : $paymentData->toArray()
+        ];
+
+        $subscription->update($updateData);
 
         Payment::updateOrCreate(
-            ['payment_id' => $session->id],
+            ['payment_id' => $subscription->payment_session_id],
             [
                 'status' => Payment::STATUS_PAID,
-                'details' => $session->toArray()
+                'details' => $updateData['payment_details']
             ]
         );
     }
@@ -213,7 +313,6 @@ class PaymentController extends Controller
 
         if ($subscription && $subscription->is_active == User_Subscription::STATUS_PENDING) {
             $this->activateSubscription($subscription, $session);
-
             // يمكنك هنا إرسال إشعار للمستخدم
         }
     }
@@ -261,5 +360,20 @@ class PaymentController extends Controller
                 ]
             ]);
         }
+    }
+
+    protected function successResponse($subscription, $message)
+    {
+        return response()->json([
+            'success' => true,
+            'message' => $message,
+            'data' => [
+                'subscription' => $subscription,
+                'payment_status' => 'paid',
+                'start_date' => $subscription->start_date,
+                'end_date' => $subscription->end_date,
+                'payment_method' => $subscription->payment_method
+            ]
+        ])->header('Content-Type', 'application/json');
     }
 }

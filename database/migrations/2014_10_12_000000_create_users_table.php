@@ -23,6 +23,8 @@ return new class extends Migration
             $table->string('image')->nullable();
             $table->string('password'); // Password (hashed)
             $table->timestamp('email_verified_at')->nullable(); // Email verification
+            $table->string('status')->default('active'); // OTP for phone verification
+
             $table->rememberToken(); // For "remember me" functionality
             $table->timestamps(); // Created at and updated at
         });

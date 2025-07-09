@@ -14,19 +14,17 @@ use Stripe\Checkout\Session;
 class UserSubscriptionService
 {
 
-public function subscribeUser($user, $subscriptionId, $discountCode = null)
+public function subscribeUser($user, $subscriptionId, $discountCode = null, $paymentMethod = 'stripe')
 {
     try {
-
-
-        return DB::transaction(function () use ($user, $subscriptionId, $discountCode) {
+        return DB::transaction(function () use ($user, $subscriptionId, $discountCode, $paymentMethod) {
             $subscription = Subscription::findOrFail($subscriptionId);
 
             if (!$subscription->is_active) {
                 throw new \Exception('هذه الباقة غير متاحة حالياً');
             }
 
-            // حساب السعر والخصم
+            // حساب السعر والخصم (يبقى كما هو)
             $originalPrice = $subscription->price;
             $finalPrice = $originalPrice;
             $discountApplied = null;
@@ -40,7 +38,7 @@ public function subscribeUser($user, $subscriptionId, $discountCode = null)
 
                 if ($discountCoupon) {
                     $discountAmount = $originalPrice * ($discountCoupon->discount_percent / 100);
-                    $finalPrice = max(50, $originalPrice - $discountAmount); // الحد الأدنى 0.50 دولار
+                    $finalPrice = max(50, $originalPrice - $discountAmount);
                     $discountApplied = [
                         'code' => $discountCoupon->code,
                         'percent' => $discountCoupon->discount_percent,
@@ -50,7 +48,7 @@ public function subscribeUser($user, $subscriptionId, $discountCode = null)
                 }
             }
 
-            // إنشاء اشتراك مؤقت
+            // إنشاء اشتراك مؤقت (يبقى كما هو)
             $userSubscription = User_Subscription::create([
                 'user_id' => $user->id,
                 'subscription_id' => $subscription->id,
@@ -60,69 +58,130 @@ public function subscribeUser($user, $subscriptionId, $discountCode = null)
                 'remaining_calls' => 0,
                 'remaining_visits' => 0,
                 'is_active' => User_Subscription::STATUS_PENDING,
-                'payment_method' => 'stripe',
+                'payment_method' => $paymentMethod,
                 'payment_status' => 'pending'
             ]);
 
-            // تكوين Stripe
-        $stripe = new \Stripe\StripeClient(env('STRIPE_SECRET'));
+            if ($paymentMethod == 'stripe') {
+                // تكوين Stripe (الكود الحالي)
+                $stripe = new \Stripe\StripeClient(env('STRIPE_SECRET'));
 
-            // إنشاء جلسة الدفع
-            $session =  $stripe->checkout->sessions->create([
-                'payment_method_types' => ['card'],
-                'line_items' => [[
-                    'price_data' => [
-                        'currency' => 'usd',
-                        'product_data' => [
-                            'name' => $subscription->name,
-                            'description' => $subscription->description,
+                $session = $stripe->checkout->sessions->create([
+                    'payment_method_types' => ['card'],
+                    'line_items' => [[
+                        'price_data' => [
+                            'currency' => 'usd',
+                            'product_data' => [
+                                'name' => $subscription->name,
+                                'description' => $subscription->description,
+                            ],
+                            'unit_amount' => (int)($finalPrice * 100),
                         ],
-                        'unit_amount' => (int)($finalPrice * 100),
-                    ],
-                    'quantity' => 1,
-                ]],
-                'mode' => 'payment',
-                'success_url' => url("/api/payment/success/{$userSubscription->id}"),
-                'cancel_url' => url("/api/payment/cancel/{$userSubscription->id}"),
-                'customer_email' => $user->email,
-                'metadata' => [
-                    'user_id' => $user->id,
-                    'subscription_id' => $subscription->id,
-                    'user_subscription_id' => $userSubscription->id
-                ]
-            ]);
+                        'quantity' => 1,
+                    ]],
+                    'mode' => 'payment',
+                    'success_url' => url("/api/payment/success/{$userSubscription->id}"),
+                    'cancel_url' => url("/api/payment/cancel/{$userSubscription->id}"),
+                    'customer_email' => $user->email,
+                    'metadata' => [
+                        'user_id' => $user->id,
+                        'subscription_id' => $subscription->id,
+                        'user_subscription_id' => $userSubscription->id
+                    ]
+                ]);
 
-            // تحديث بيانات الاشتراك
-            $userSubscription->update([
-                'payment_session_id' => $session->id,
-                'payment_details' => [
+                $paymentUrl = $session->url;
+                $paymentSessionId = $session->id;
+                $paymentDetails = [
                     'session_id' => $session->id,
                     'payment_intent' => $session->payment_intent,
                     'payment_status' => $session->payment_status
-                ]
+                ];
+            } elseif ($paymentMethod === 'paypal') {
+                // تكوين PayPal
+                $apiContext = new \PayPal\Rest\ApiContext(
+                    new \PayPal\Auth\OAuthTokenCredential(
+                        env('PAYPAL_MODE') == 'sandbox' ? env('PAYPAL_SANDBOX_CLIENT_ID') : env('PAYPAL_LIVE_CLIENT_ID'),
+                        env('PAYPAL_MODE') == 'sandbox' ? env('PAYPAL_SANDBOX_CLIENT_SECRET') : env('PAYPAL_LIVE_CLIENT_SECRET')
+                    )
+                );
+                $apiContext->setConfig(['mode' => env('PAYPAL_MODE', 'sandbox')]);
+
+                $payer = new \PayPal\Api\Payer();
+                $payer->setPaymentMethod('paypal');
+
+                $item = new \PayPal\Api\Item();
+                $item->setName($subscription->name)
+                    ->setCurrency('USD')
+                    ->setQuantity(1)
+                    ->setPrice($finalPrice);
+
+                $itemList = new \PayPal\Api\ItemList();
+                $itemList->setItems([$item]);
+
+                $amount = new \PayPal\Api\Amount();
+                $amount->setCurrency('USD')
+                    ->setTotal($finalPrice);
+
+                $transaction = new \PayPal\Api\Transaction();
+                $transaction->setAmount($amount)
+                    ->setItemList($itemList)
+                    ->setDescription($subscription->description)
+                    ->setInvoiceNumber($userSubscription->id);
+
+                $redirectUrls = new \PayPal\Api\RedirectUrls();
+                $redirectUrls->setReturnUrl(url("/api/payment/success/{$userSubscription->id}"))
+                    ->setCancelUrl(url("/api/payment/cancel/{$userSubscription->id}"));
+
+                $payment = new \PayPal\Api\Payment();
+                $payment->setIntent('sale')
+                    ->setPayer($payer)
+                    ->setTransactions([$transaction])
+                    ->setRedirectUrls($redirectUrls);
+
+                try {
+                    $payment->create($apiContext);
+                    $paymentUrl = $payment->getApprovalLink();
+                    $paymentSessionId = $payment->getId();
+                    $paymentDetails = [
+                        'payment_id' => $payment->getId(),
+                        'state' => $payment->getState(),
+                        'links' => array_map(function($link) {
+                            return ['href' => $link->getHref(), 'rel' => $link->getRel(), 'method' => $link->getMethod()];
+                        }, $payment->getLinks())
+                    ];
+                } catch (\Exception $ex) {
+                    throw new \Exception('PayPal Error: ' . $ex->getMessage());
+                }
+            } else {
+                throw new \Exception('طريقة الدفع غير مدعومة');
+            }
+
+            // تحديث بيانات الاشتراك (تعديل بسيط ليعمل مع كلا الطريقتين)
+            $userSubscription->update([
+                'payment_session_id' => $paymentSessionId,
+                'payment_details' => $paymentDetails
             ]);
 
-            // إنشاء سجل الدفع
+            // إنشاء سجل الدفع (تعديل بسيط)
             Payment::create([
                 'user_id' => $user->id,
                 'user_subscription_id' => $userSubscription->id,
-                'payment_id' => $session->id,
+                'payment_id' => $paymentSessionId,
                 'amount' => $finalPrice,
                 'currency' => 'usd',
-                'payment_method' => 'stripe',
+                'payment_method' => $paymentMethod,
                 'status' => 'pending',
-                'details' => $session->toArray()
+                'details' => $paymentDetails
             ]);
 
             return [
                 'success' => true,
-                'payment_url' => $session->url,
+                'payment_url' => $paymentUrl,
                 'subscription' => $userSubscription,
                 'discount' => $discountApplied,
-                'message' => 'ssss'
-
+                'message' => 'تم إنشاء جلسة الدفع بنجاح'
             ];
-
         });
     } catch (\Illuminate\Database\QueryException $e) {
         Log::error('Database Error: ' . $e->getMessage());
@@ -138,6 +197,13 @@ public function subscribeUser($user, $subscriptionId, $discountCode = null)
             'message' => 'حدث خطأ في نظام الدفع',
             'error' => $e->getMessage()
         ];
+    } catch (\PayPal\Exception\PayPalConnectionException $e) {
+        Log::error('PayPal Error: ' . $e->getMessage());
+        return [
+            'success' => false,
+            'message' => 'حدث خطأ في نظام الدفع PayPal',
+            'error' => json_decode($e->getData(), true)
+        ];
     } catch (\Exception $e) {
         Log::error('General Error: ' . $e->getMessage());
         return [
@@ -147,8 +213,6 @@ public function subscribeUser($user, $subscriptionId, $discountCode = null)
         ];
     }
 }
-
-
 
 
 

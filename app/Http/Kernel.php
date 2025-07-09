@@ -69,6 +69,7 @@ class Kernel extends HttpKernel
         'clinic' => \App\Http\Middleware\ClinicMiddleware::class,
         'employee' => \App\Http\Middleware\employeeMiddleware::class,
         'otp' => \App\Http\Middleware\CheckOtpVerification::class,
+        'banned' => \App\Http\Middleware\BanndMiddleWare::class,
 
 
     ];

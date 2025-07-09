@@ -35,17 +35,16 @@ class LoginController extends Controller
 
 
 
-    public function login(LoginRequest $request): JsonResponse
-    {
-        // The validated data is automatically available from the request
-        $validatedData = $request->validated();
+public function login(LoginRequest $request): JsonResponse
+{
+    $validatedData = $request->validated();
+    $loginData = $this->loginService->login($validatedData);
 
-        $token = $this->loginService->login($validatedData);
-
-        return response()->json([
-            'access_token' => $token,
-        ]);
-    }
+    return response()->json([
+        'user' => $loginData['user'],
+        'access_token' => $loginData['access_token']
+    ]);
+}
 
 
     public function logout(){

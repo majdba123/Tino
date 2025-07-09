@@ -148,6 +148,8 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
             Route::get('/get_all', [UserController::class, 'getAllUsers']);
             Route::get('/show/{id}', [UserController::class, 'getUserById']);
             Route::delete('/delete/{pill_id}', [UserController::class, 'deleteUser']);
+            Route::post('/update_status/{id}', [UserController::class, 'updateUserStatus']);
+
 
         });
 
@@ -178,7 +180,7 @@ Route::get('/payment/cancel/{subscription}', [PaymentController::class, 'cancel'
 
 
 
-Route::middleware(['auth:sanctum'])->group(function () {
+Route::middleware(['auth:sanctum' , 'banned'])->group(function () {
 
 
 
@@ -239,7 +241,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 ###########################################################################################################################################
 ###########################################################################################################################################
 
-Route::middleware(['auth:sanctum' , 'clinic'])->group(function () {
+Route::middleware(['auth:sanctum' , 'clinic','bannd'])->group(function () {
     Route::prefix('clinic')->group(function () {
         Route::prefix('order')->group(function () {
             Route::get('fillter/', [OrderClinicController::class, 'getClinicOrders']);
@@ -277,7 +279,7 @@ Route::middleware(['auth:sanctum' , 'clinic'])->group(function () {
 ###########################################################################################################################################
 
 
-Route::middleware(['auth:sanctum' , 'employee'])->group(function () {
+Route::middleware(['auth:sanctum' , 'employee' ,'bannd'])->group(function () {
 
     Route::prefix('employee')->group(function () {
             Route::prefix('clinics')->group(function () {

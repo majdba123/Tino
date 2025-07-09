@@ -484,4 +484,65 @@ class UserController extends Controller
         }
     }
 
+
+
+
+
+
+    /**
+ * تحديث حالة المستخدم (active/banned)
+ *
+ * @param Request $request
+ * @param int $id
+ * @return JsonResponse
+ */
+    public function updateUserStatus(Request $request, $id): JsonResponse
+    {
+        try {
+
+
+            $validator = Validator::make($request->all(), [
+                'status' => 'required|in:active,banned'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $user = User::find($id);
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'المستخدم غير موجود'
+                ], 404);
+            }
+
+
+
+            $user->status = $request->status;
+            $user->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'تم تحديث حالة المستخدم بنجاح',
+                'data' => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'status' => $user->status
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'فشل في تحديث حالة المستخدم: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
 }

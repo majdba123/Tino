@@ -19,12 +19,18 @@ class UserSubscriptionController extends Controller
         $this->middleware('auth:sanctum');
     }
 
+
+
+
     public function subscribe(SubscribeRequest $request): JsonResponse
     {
+        $validated = $request->validated();
+
         $subscription = $this->subscriptionService->subscribeUser(
             $request->user(),
             $request->subscription_id,
-            $request->discount_code // إرسال كود الخصم إذا كان موجودًا
+            $request->discount_code,
+            $request->payment_method ?? 'stripe' // القيمة الافتراضية stripe
         );
 
         return response()->json([
@@ -33,6 +39,26 @@ class UserSubscriptionController extends Controller
             'message' => $subscription['message'],
         ], $subscription['success'] ? 201 : 400);
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     public function activeSubscription($user_id): JsonResponse
     {
         $subscription = $this->subscriptionService->getUserActiveSubscription(

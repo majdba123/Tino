@@ -13,7 +13,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache; // Import Cache facade
 use Illuminate\Support\Str;
-use Twilio\Rest\Client;
+use Twilio\Rest\Client; // Keep this one
 use App\Helpers\OtpHelper;
 
 class RegisterController extends Controller
@@ -40,10 +40,10 @@ class RegisterController extends Controller
 
        if (isset($validatedData['email'])) {
             OtpHelper::sendOtpEmail($user->id);
-        }/*elseif(isset($validatedData['phone']))
+        }elseif(isset($validatedData['phone']))
         {
             $this->sendOtp_mobile($user->id);
-        }*/
+        }
 
         return response()->json([
             'message' => 'User  registered successfully',
@@ -96,7 +96,7 @@ class RegisterController extends Controller
     }
 
 
-   /* private function sendSms($phone, $otp)
+    private function sendSms($phone, $otp)
     {
         $account_sid = env('TWILIO_SID');
         $auth_token = env('TWILIO_TOKEN');
@@ -107,5 +107,5 @@ class RegisterController extends Controller
             'from' => $twilio_number,
             'body' => "Your OTP code is: $otp"
         ]);
-    }*/
+    }
 }
