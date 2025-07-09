@@ -13,8 +13,6 @@ class UserController extends Controller
 {
     /**
      * جلب معلومات المستخدم الحالي
-     *
-     * @return JsonResponse
      */
     public function getProfile(): JsonResponse
     {
@@ -43,7 +41,6 @@ class UserController extends Controller
                 ]
             ];
 
-            // إضافة رابط الصورة إذا كانت موجودة
             if ($user->image) {
                 $response['data']['image'] = Storage::url($user->image);
             }
@@ -60,9 +57,6 @@ class UserController extends Controller
 
     /**
      * تحديث معلومات المستخدم
-     *
-     * @param Request $request
-     * @return JsonResponse
      */
     public function updateProfile(Request $request): JsonResponse
     {
@@ -83,7 +77,7 @@ class UserController extends Controller
                 'lat' => 'sometimes|numeric',
                 'lang' => 'sometimes|numeric',
                 'password' => 'sometimes|string|min:8|confirmed',
-                'image' => 'sometimes|image|mimes:jpeg,png,jpg,gif|max:2048' // 2MB كحد أقصى
+                'image' => 'sometimes|image|mimes:jpeg,png,jpg,gif|max:2048'
             ]);
 
             if ($validator->fails()) {
@@ -99,16 +93,11 @@ class UserController extends Controller
                 $data['password'] = bcrypt($request->password);
             }
 
-            // معالجة رفع الصورة
             if ($request->hasFile('image')) {
-                // حذف الصورة القديمة إذا كانت موجودة
                 if ($user->image && Storage::exists($user->image)) {
                     Storage::delete($user->image);
                 }
-
-                // حفظ الصورة الجديدة
-                $path = $request->file('image')->store('public/users/images');
-                $data['image'] = $path;
+                $data['image'] = $request->file('image')->store('public/users/images');
             }
 
             $user->update($data);
@@ -128,7 +117,6 @@ class UserController extends Controller
                 ]
             ];
 
-            // إضافة رابط الصورة إذا كانت موجودة
             if ($user->image) {
                 $response['data']['image'] = Storage::url($user->image);
             }
@@ -141,23 +129,23 @@ class UserController extends Controller
                 'message' => 'فشل في تحديث البيانات: ' . $e->getMessage()
             ], 500);
         }
-
     }
 
-
+    /**
+     * جلب بيانات عيادة المستخدم
+     */
     public function getClinicProfile(): JsonResponse
     {
         try {
             $user = Auth::user();
+            $clinic = $user->clinic ?? null;
 
-            if (!$user || !$user->clinic) {
+            if (!$clinic) {
                 return response()->json([
                     'success' => false,
                     'message' => 'المستخدم غير مسجل الدخول أو ليس لديه عيادة'
                 ], 401);
             }
-
-            $clinic = $user->clinic;
 
             $response = [
                 'success' => true,
@@ -180,10 +168,10 @@ class UserController extends Controller
                     'user_id' => $clinic->user_id
                 ]
             ];
+
             if ($user->image) {
                 $response['data']['image'] = Storage::url($user->image);
             }
-
 
             return response()->json($response);
 
@@ -195,24 +183,23 @@ class UserController extends Controller
         }
     }
 
-
+    /**
+     * تحديث بيانات العيادة
+     */
     public function updateClinicProfile(Request $request): JsonResponse
     {
         try {
             $user = Auth::user();
+            $clinic = $user->clinic ?? null;
 
-            if (!$user || !$user->clinic) {
+            if (!$clinic) {
                 return response()->json([
                     'success' => false,
                     'message' => 'المستخدم غير مسجل الدخول أو ليس لديه عيادة'
                 ], 401);
             }
 
-            $clinic = $user->clinic;
-
-            // تحقق من صحة بيانات العيادة والمستخدم
             $validator = Validator::make($request->all(), [
-                // بيانات العيادة
                 'name' => 'sometimes|string|max:255',
                 'address' => 'sometimes|string',
                 'phone' => 'sometimes|string|max:20',
@@ -220,9 +207,6 @@ class UserController extends Controller
                 'longitude' => 'sometimes|numeric',
                 'opening_time' => 'sometimes|date_format:H:i',
                 'closing_time' => 'sometimes|date_format:H:i|after:opening_time',
-
-
-                // بيانات المستخدم
                 'user_email' => 'sometimes|email|unique:users,email,'.$user->id,
                 'user_password' => 'sometimes|string|min:8|confirmed',
                 'user_image' => 'sometimes|image|mimes:jpeg,png,jpg,gif|max:2048'
@@ -240,45 +224,22 @@ class UserController extends Controller
                 ], 422);
             }
 
-            // تحديث بيانات العيادة
-            $clinicData = $request->only([
-                 'address', 'phone',
-                'latitude', 'longitude',
-                'opening_time', 'closing_time',
+            $clinic->update($request->only([
+                'address', 'phone', 'latitude', 'longitude',
+                'opening_time', 'closing_time'
+            ]));
 
-            ]);
-
-            $clinic->update($clinicData);
-
-            // تحديث بيانات المستخدم
             $userData = [];
+            if ($request->has('name')) $userData['name'] = $request->name;
+            if ($request->has('user_email')) $userData['email'] = $request->user_email;
+            if ($request->has('user_password')) $userData['password'] = bcrypt($request->user_password);
+            if ($request->has('user_phone')) $userData['phone'] = $request->user_phone;
 
-            if ($request->has('name')) {
-                $userData['name'] = $request->name;
-            }
-
-            if ($request->has('user_email')) {
-                $userData['email'] = $request->user_email;
-            }
-
-            if ($request->has('user_password')) {
-                $userData['password'] = bcrypt($request->user_password);
-            }
-
-            if ($request->has('user_phone')) {
-                $userData['phone'] = $request->user_phone;
-            }
-
-            // معالجة صورة المستخدم
             if ($request->hasFile('user_image')) {
-                // حذف الصورة القديمة إذا كانت موجودة
                 if ($user->image && Storage::exists($user->image)) {
                     Storage::delete($user->image);
                 }
-
-                // حفظ الصورة الجديدة
-                $path = $request->file('user_image')->store('public/users/images');
-                $userData['image'] = $path;
+                $userData['image'] = $request->file('user_image')->store('public/users/images');
             }
 
             if (!empty($userData)) {
@@ -308,43 +269,32 @@ class UserController extends Controller
         }
     }
 
-
-
-
-
-
-
-
-        public function getAllUsers(Request $request): JsonResponse
-        {
+    /**
+     * جلب جميع المستخدمين مع التقسيم والترتيب
+     */
+    public function getAllUsers(Request $request): JsonResponse
+    {
         try {
+            $query = User::query()->latest();
 
-
-            $query = User::query();
-
-            // Add filters if needed
             if ($request->has('type')) {
                 $query->where('type', $request->type);
             }
 
             if ($request->has('name')) {
                 $query->where('name', 'like', "%$request->name%");
-
             }
+
             if ($request->has('email')) {
                 $query->where('email', 'like', "%$request->email%");
-
             }
+
             if ($request->has('phone')) {
                 $query->where('phone', 'like', "%$request->phone%");
-
             }
 
-
-            // Paginate results
             $users = $query->paginate($request->per_page ?? 15);
 
-            // Format response
             $users->getCollection()->transform(function ($user) {
                 return [
                     'id' => $user->id,
@@ -360,7 +310,13 @@ class UserController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data' => $users
+                'data' => $users->items(),
+                'meta' => [
+                    'current_page' => $users->currentPage(),
+                    'per_page' => $users->perPage(),
+                    'total' => $users->total(),
+                    'last_page' => $users->lastPage()
+                ]
             ]);
 
         } catch (\Exception $e) {
@@ -372,15 +328,11 @@ class UserController extends Controller
     }
 
     /**
-     * Get specific user details (Admin only)
-     *
-     * @param int $id
-     * @return JsonResponse
+     * جلب مستخدم معين بالتفاصيل
      */
     public function getUserById($id): JsonResponse
     {
         try {
-
             $user = User::find($id);
 
             if (!$user) {
@@ -408,7 +360,6 @@ class UserController extends Controller
                 ]
             ];
 
-            // Add clinic data if user is a clinic
             if ($user->type === '3' && $user->clinic) {
                 $response['data']['clinic'] = [
                     'address' => $user->clinic->address,
@@ -431,15 +382,11 @@ class UserController extends Controller
     }
 
     /**
-     * Delete a user (Admin only)
-     *
-     * @param int $id
-     * @return JsonResponse
+     * حذف مستخدم (للمسؤول فقط)
      */
     public function deleteUser($id): JsonResponse
     {
         try {
-            // Check if user is admin
             if (Auth::user()->type !== 'admin') {
                 return response()->json([
                     'success' => false,
@@ -447,7 +394,6 @@ class UserController extends Controller
                 ], 403);
             }
 
-            // Prevent admin from deleting themselves
             if (Auth::id() == $id) {
                 return response()->json([
                     'success' => false,
@@ -464,7 +410,6 @@ class UserController extends Controller
                 ], 404);
             }
 
-            // Delete user image if exists
             if ($user->image && Storage::exists($user->image)) {
                 Storage::delete($user->image);
             }
@@ -484,23 +429,12 @@ class UserController extends Controller
         }
     }
 
-
-
-
-
-
     /**
- * تحديث حالة المستخدم (active/banned)
- *
- * @param Request $request
- * @param int $id
- * @return JsonResponse
- */
+     * تحديث حالة المستخدم (active/banned)
+     */
     public function updateUserStatus(Request $request, $id): JsonResponse
     {
         try {
-
-
             $validator = Validator::make($request->all(), [
                 'status' => 'required|in:active,banned'
             ]);
@@ -520,8 +454,6 @@ class UserController extends Controller
                     'message' => 'المستخدم غير موجود'
                 ], 404);
             }
-
-
 
             $user->status = $request->status;
             $user->save();
@@ -544,5 +476,4 @@ class UserController extends Controller
             ], 500);
         }
     }
-
 }

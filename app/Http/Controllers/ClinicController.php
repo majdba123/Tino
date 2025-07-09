@@ -45,7 +45,7 @@ class ClinicController extends Controller
 
         $query = Clinic::with(['user' => function($query) {
             $query->select('id', 'name');
-        }]);
+        }])->latest(); // إضافة الترتيب حسب الأحدث هنا
 
         // فلترة حسب الحقول الأساسية
         $this->applyFilters($query, $validated, [
@@ -80,7 +80,6 @@ class ClinicController extends Controller
             ]
         ]);
     }
-
     // دالة مساعدة لتطبيق الفلاتر
     protected function applyFilters($query, $filters, $filterMap)
     {

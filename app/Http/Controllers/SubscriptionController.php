@@ -26,18 +26,29 @@ class SubscriptionController extends Controller
             'price_min' => 'sometimes|numeric|min:0|nullable',
             'price_max' => 'sometimes|numeric|min:0|nullable',
             'is_active' => 'sometimes|string|in:true,false,all|nullable',
-            'type' => 'sometimes|string|in:basic,premium|nullable'
+            'type' => 'sometimes|string|in:basic,premium|nullable',
+            'per_page' => 'sometimes|integer|min:1|max:100' // إضافة اختيار عدد العناصر في الصفحة
         ]);
 
-        $filters = array_filter($validated, function($value) {
-            return $value !== null && $value !== '';
-        });
+        $filters = array_filter($validated, function($value, $key) {
+            return $value !== null && $value !== '' && $key !== 'per_page';
+        }, ARRAY_FILTER_USE_BOTH);
 
-        $subscriptions = $this->subscriptionService->getSubscriptions($filters);
+        $perPage = $request->input('per_page', 15); // 15 عنصراً في الصفحة افتراضياً
+
+        $subscriptions = $this->subscriptionService->getSubscriptions($filters)
+            ->latest() // الترتيب حسب الأحدث
+            ->paginate($perPage);
 
         return response()->json([
             'success' => true,
-            'data' => $subscriptions,
+            'data' => $subscriptions->items(),
+            'meta' => [
+                'current_page' => $subscriptions->currentPage(),
+                'last_page' => $subscriptions->lastPage(),
+                'per_page' => $subscriptions->perPage(),
+                'total' => $subscriptions->total(),
+            ],
             'filters' => $filters
         ]);
     }
@@ -110,46 +121,52 @@ class SubscriptionController extends Controller
         ]);
     }
 
+    public function get_all_user_subscriped(Request $request): JsonResponse
+    {
+        $perPage = $request->input('per_page', 15); // 15 عنصراً في الصفحة افتراضياً
 
-    public function get_all_user_subscriped(): JsonResponse
-{
-    // جلب المستخدمين الذين لديهم اشتراكات نشطة مع معلوماتهم واشتراكاتهم
-    $usersWithActiveSubscriptions = User_Subscription::with(['user', 'subscription'])
-        ->where('is_active', true)
-        ->get()
-        ->groupBy('user_id')
-        ->map(function ($subscriptions) {
-            $user = $subscriptions->first()->user;
-            return [
-                'user' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    // يمكنك إضافة المزيد من حقول المستخدم هنا
-                ],
-                'subscriptions' => $subscriptions->map(function ($subscription) {
-                    return [
-                        'subscription_id' => $subscription->subscription_id,
-                        'subscription_name' => $subscription->subscription->name,
-                        'start_date' => $subscription->start_date,
-                        'end_date' => $subscription->end_date,
-                        'remaining_calls' => $subscription->remaining_calls,
-                        'remaining_visits' => $subscription->remaining_visits,
-                        'is_active' => $subscription->is_active
-                    ];
-                })
-            ];
-        })
-        ->values(); // لتحويل النتيجة إلى مصفوفة بدلاً من object
+        $query = User_Subscription::with(['user', 'subscription'])
+            ->where('is_active', true)
+            ->latest();
 
-    return response()->json([
-        'success' => true,
-        'data' => $usersWithActiveSubscriptions,
-        'message' => 'تم جلب المستخدمين المشتركين بنجاح'
-    ]);
-}
+        $paginatedSubscriptions = $query->paginate($perPage);
 
+        // تنسيق البيانات مع الحفاظ على الهيكل الأصلي
+        $formattedData = $paginatedSubscriptions->getCollection()
+            ->groupBy('user_id')
+            ->map(function ($subscriptions) {
+                $user = $subscriptions->first()->user;
+                return [
+                    'user' => [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'email' => $user->email,
+                    ],
+                    'subscriptions' => $subscriptions->map(function ($subscription) {
+                        return [
+                            'subscription_id' => $subscription->subscription_id,
+                            'subscription_name' => $subscription->subscription->name,
+                            'start_date' => $subscription->start_date,
+                            'end_date' => $subscription->end_date,
+                            'remaining_calls' => $subscription->remaining_calls,
+                            'remaining_visits' => $subscription->remaining_visits,
+                            'is_active' => $subscription->is_active
+                        ];
+                    })
+                ];
+            })
+            ->values();
 
-
-
+        return response()->json([
+            'success' => true,
+            'data' => $formattedData,
+            'meta' => [
+                'current_page' => $paginatedSubscriptions->currentPage(),
+                'last_page' => $paginatedSubscriptions->lastPage(),
+                'per_page' => $paginatedSubscriptions->perPage(),
+                'total' => $paginatedSubscriptions->total(),
+            ],
+            'message' => 'تم جلب المستخدمين المشتركين بنجاح'
+        ]);
+    }
 }

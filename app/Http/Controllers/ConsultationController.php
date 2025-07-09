@@ -19,10 +19,11 @@ use App\Events\chat1;
 
 class ConsultationController extends Controller
 {
-    // إنشاء استشارة جديدة
+    /**
+     * إنشاء استشارة جديدة
+     */
     public function store(Request $request)
     {
-        // التحقق من وجود اشتراك فعال أولاً
         $subscriptionCheck = $this->checkActiveSubscription(Auth::id());
         if (!$subscriptionCheck['success']) {
             return response()->json([
@@ -31,10 +32,17 @@ class ConsultationController extends Controller
             ], 403);
         }
 
-        $request->validate([
+        $validator = Validator::make($request->all(), [
             'pet_id' => 'required|exists:pets,id,user_id,'.Auth::id(),
             'description' => 'required|string|max:1000',
         ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors()
+            ], 422);
+        }
 
         $consultation = Consultation::create([
             'user_id' => Auth::id(),
@@ -46,66 +54,74 @@ class ConsultationController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Consultation created successfully',
+            'message' => 'تم إنشاء الاستشارة بنجاح',
             'data' => $consultation
         ], 201);
     }
 
-    // عرض جميع استشارات المستخدم
+    /**
+     * عرض جميع استشارات المستخدم مع التقسيم
+     */
     public function index(Request $request)
     {
-        // التحقق من وجود معامل الفلترة في الطلب
-        $operationStatus = $request->query('operation_status');
-        $status = $request->query('status');
-        $pet_id = $request->query('pet_id');
-        $user_id = $request->query('user_id');
+        $perPage = $request->input('per_page', 10); // 10 عناصر في الصفحة افتراضياً
 
-        // بناء الاستعلام الأساسي
-        $query = Consultation::query()->with('pet','anwer_cons')->latest(); // الترتيب حسب الأحدث (حقل created_at)
+        $query = Consultation::with(['pet', 'anwer_cons'])
+            ->latest();
 
-        // إذا لم يكن المستخدم مدير (admin)، نضيف شرط user_id
         if (Auth::user()->type !== 'admin' && Auth::user()->type !== '2') {
             $query->where('user_id', Auth::id());
         }
 
-        // تطبيق الفلترة إذا تم تحديد operation_status
-        if ($operationStatus) {
-            $query->where('operation', $operationStatus);
-        }
-        if ($status) {
-            $query->where('status', $status);
-        }
-        if ($pet_id) {
-            $query->where('pet_id', $pet_id);
-        }
-        if ($user_id) {
-            $query->where('user_id', $user_id);
+        // تطبيق الفلاتر
+        if ($request->filled('operation_status')) {
+            $query->where('operation', $request->operation_status);
         }
 
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
 
-        // تطبيق التقسيم إلى صفحات مع 10 عناصر لكل صفحة (يمكن تغيير الرقم حسب الحاجة)
-        $consultations = $query->paginate(10);
+        if ($request->filled('pet_id')) {
+            $query->where('pet_id', $request->pet_id);
+        }
+
+        if ($request->filled('user_id') && (Auth::user()->type === 'admin' || Auth::user()->type === '2')) {
+            $query->where('user_id', $request->user_id);
+        }
+
+        $consultations = $query->paginate($perPage);
 
         return response()->json([
             'success' => true,
-            'data' => $consultations
+            'data' => $consultations->items(),
+            'meta' => [
+                'current_page' => $consultations->currentPage(),
+                'last_page' => $consultations->lastPage(),
+                'per_page' => $consultations->perPage(),
+                'total' => $consultations->total(),
+            ]
         ]);
     }
-    // عرض استشارة معينة
+
+    /**
+     * عرض استشارة معينة
+     */
     public function show($id)
     {
         $consultation = Consultation::with('pet')->find($id);
+
         if (!$consultation) {
             return response()->json([
                 'success' => false,
-                'message' => 'Consultation not found'
+                'message' => 'الاستشارة غير موجودة'
             ], 404);
         }
-        // إذا لم يكن المستخدم مديراً (admin) ولم يكن صاحب الاستشارة
+
         if (Auth::user()->type !== 'admin' && $consultation->user_id !== Auth::id() && Auth::user()->type !== '2') {
             return response()->json([
                 'success' => false,
-                'message' => 'Unauthorized'
+                'message' => 'غير مصرح بالوصول'
             ], 403);
         }
 
@@ -115,6 +131,9 @@ class ConsultationController extends Controller
         ]);
     }
 
+    /**
+     * تغيير نوع العملية للاستشارة
+     */
     public function change_operation($id)
     {
         $consultation = Consultation::find($id);
@@ -130,8 +149,6 @@ class ConsultationController extends Controller
             'operation' => 'required|in:call,inside,outside',
             'admin_notes' => 'required_if:operation,call,outside,inside|string',
             'clinic_id' => 'required_if:operation,outside,inside|exists:clinics,id'
-        ], [
-            // رسائل التحقق تبقى كما هي
         ]);
 
         if ($validator->fails()) {
@@ -141,137 +158,182 @@ class ConsultationController extends Controller
             ], 422);
         }
 
-        $operation = request('operation');
-        $consultation->operation = $operation;
-        $consultation->admin_notes = request('admin_notes');
-        $responseData = [];
+        DB::transaction(function () use ($consultation) {
+            $operation = request('operation');
+            $consultation->operation = $operation;
+            $consultation->admin_notes = request('admin_notes');
+            $responseData = [];
 
-        if ($operation === 'call') {
-            $consultation->status = "complete";
-            $responseData['message'] = 'تم تحويل الاستشارة إلى مكالمة بنجاح';
-
-            // إشعارات للمستخدم
-            $this->sendNotification(
-                $consultation->user_id,
-                "تم تحويل استشارتك رقم {$consultation->id} إلى مكالمة وسيتم التواصل معك قريباً",
-                $consultation->id
-            );
-
-            // إشعار للإدمن
-            $this->sendNotification(
-                1, // ID الإدمن
-                "تم تحويل الاستشارة رقم {$consultation->id} إلى مكالمة",
-                $consultation->id,
-                true
-            );
-
-        } elseif (in_array($operation, ['outside', 'inside'])) {
-            $clinic = Clinic::find(request('clinic_id'));
-
-            if (!$clinic || $clinic->status !== 'active') {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'يجب اختيار عيادة نشطة'
-                ], 422);
-            }
-
-            if ($operation === 'outside') {
-                if ($clinic->type !== 'external') {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'يجب اختيار عيادة خارجية للعملية الخارجية'
-                    ], 422);
-                }
-
-                // إنشاء سجل Anwer_Cons
-                Anwer_Cons::updateOrCreate(
-                    ['consultation_id' => $consultation->id],
-                    [
-                        'clinic_info' => json_encode([
-                            // معلومات العيادة تبقى كما هي
-                        ]),
-                        'operation' => $operation
-                    ]
-                );
-
+            if ($operation === 'call') {
                 $consultation->status = "complete";
-                $responseData['message'] = 'تم تحويل الاستشارة إلى عيادة خارجية بنجاح';
-                $responseData['clinic'] = $clinic;
+                $responseData['message'] = 'تم تحويل الاستشارة إلى مكالمة بنجاح';
 
-                // إشعارات للمستخدم
                 $this->sendNotification(
                     $consultation->user_id,
-                    "تم تحويل استشارتك رقم {$consultation->id} إلى عيادة {$clinic->user->name} الخارجية",
+                    "تم تحويل استشارتك رقم {$consultation->id} إلى مكالمة وسيتم التواصل معك قريباً",
                     $consultation->id
                 );
 
-                // إشعارات للعيادة
                 $this->sendNotification(
-                    $clinic->user_id,
-                    "لديك استشارة جديدة رقم {$consultation->id} محولة إليك",
-                    $consultation->id
-                );
-
-                // إشعار للإدمن
-                $this->sendNotification(
-                    1, // ID الإدمن
-                    "تم تحويل الاستشارة رقم {$consultation->id} إلى العيادة الخارجية {$clinic->user->name}",
+                    1,
+                    "تم تحويل الاستشارة رقم {$consultation->id} إلى مكالمة",
                     $consultation->id,
                     true
                 );
 
-            } else { // حالة inside
-                if ($clinic->type !== 'integrated') {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'يجب اختيار عيادة داخلية للعملية الداخلية'
-                    ], 422);
+            } elseif (in_array($operation, ['outside', 'inside'])) {
+                $clinic = Clinic::find(request('clinic_id'));
+
+                if (!$clinic || $clinic->status !== 'active') {
+                    throw new \Exception('يجب اختيار عيادة نشطة');
                 }
 
-                $consultation->status = "reviewed";
-                $responseData['message'] = 'تم تحويل الاستشارة إلى عيادة داخلية بنجاح ويجب مراجعتها';
+                if ($operation === 'outside') {
+                    if ($clinic->type !== 'external') {
+                        throw new \Exception('يجب اختيار عيادة خارجية للعملية الخارجية');
+                    }
 
-                // إشعارات للمستخدم
-                $this->sendNotification(
-                    $consultation->user_id,
-                    "تم تحويل استشارتك رقم {$consultation->id} إلى عيادة {$clinic->user->name} الداخلية",
-                    $consultation->id
-                );
+                    Anwer_Cons::updateOrCreate(
+                        ['consultation_id' => $consultation->id],
+                        [
+                            'clinic_info' => json_encode([]),
+                            'operation' => $operation
+                        ]
+                    );
 
-                // إشعارات للعيادة
-                $this->sendNotification(
-                    $clinic->user_id,
-                    "لديك استشارة جديدة رقم {$consultation->id} تحتاج للمراجعة",
-                    $consultation->id
-                );
+                    $consultation->status = "complete";
+                    $responseData['message'] = 'تم تحويل الاستشارة إلى عيادة خارجية بنجاح';
+                    $responseData['clinic'] = $clinic;
 
-                // إشعار للإدمن
-                $this->sendNotification(
-                    1, // ID الإدمن
-                    "تم تحويل الاستشارة رقم {$consultation->id} إلى العيادة الداخلية {$clinic->user->name}",
-                    $consultation->id,
+                    $this->sendNotification(
+                        $consultation->user_id,
+                        "تم تحويل استشارتك رقم {$consultation->id} إلى عيادة {$clinic->user->name} الخارجية",
+                        $consultation->id
+                    );
 
-                );
+                    $this->sendNotification(
+                        $clinic->user_id,
+                        "لديك استشارة جديدة رقم {$consultation->id} محولة إليك",
+                        $consultation->id
+                    );
 
-                // إنشاء سجل Order_Clinic
-                Order_Clinic::create([
-                    'consultation_id' => $consultation->id,
-                    'clinic_id' => $clinic->id,
-                    'status' => 'pending',
-                    'operation' => $operation
-                ]);
+                    $this->sendNotification(
+                        1,
+                        "تم تحويل الاستشارة رقم {$consultation->id} إلى العيادة الخارجية {$clinic->user->name}",
+                        $consultation->id,
+                        true
+                    );
+
+                } else {
+                    if ($clinic->type !== 'integrated') {
+                        throw new \Exception('يجب اختيار عيادة داخلية للعملية الداخلية');
+                    }
+
+                    $consultation->status = "reviewed";
+                    $responseData['message'] = 'تم تحويل الاستشارة إلى عيادة داخلية بنجاح ويجب مراجعتها';
+
+                    $this->sendNotification(
+                        $consultation->user_id,
+                        "تم تحويل استشارتك رقم {$consultation->id} إلى عيادة {$clinic->user->name} الداخلية",
+                        $consultation->id
+                    );
+
+                    $this->sendNotification(
+                        $clinic->user_id,
+                        "لديك استشارة جديدة رقم {$consultation->id} تحتاج للمراجعة",
+                        $consultation->id
+                    );
+
+                    $this->sendNotification(
+                        1,
+                        "تم تحويل الاستشارة رقم {$consultation->id} إلى العيادة الداخلية {$clinic->user->name}",
+                        $consultation->id,
+                        true
+                    );
+
+                    Order_Clinic::create([
+                        'consultation_id' => $consultation->id,
+                        'clinic_id' => $clinic->id,
+                        'status' => 'pending',
+                        'operation' => $operation
+                    ]);
+                }
             }
-        }
 
-        $consultation->save();
+            $consultation->save();
+        });
 
         return response()->json([
             'success' => true,
-            'data' => array_merge($consultation->toArray(), $responseData)
+            'message' => 'تم تحديث نوع العملية بنجاح',
+            'data' => $consultation
         ]);
     }
 
-    // دالة مساعدة جديدة لإرسال الإشعارات
+    /**
+     * إعادة تحويل الاستشارة إلى عيادة أخرى
+     */
+    public function reassignToClinic($consultationId)
+    {
+        $consultation = Consultation::find($consultationId);
+
+        if (!$consultation) {
+            return response()->json([
+                'success' => false,
+                'message' => 'الاستشارة غير موجودة'
+            ], 404);
+        }
+
+        if ($consultation->status !== 'disapproved') {
+            return response()->json([
+                'success' => false,
+                'message' => 'لا يمكن إعادة التحويل إلا للاستشارات المرفوضة'
+            ], 400);
+        }
+
+        $validator = Validator::make(request()->all(), [
+            'clinic_id' => 'required|exists:clinics,id',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $clinic = Clinic::find(request('clinic_id'));
+
+        if (!$clinic || $clinic->status !== 'active') {
+            return response()->json([
+                'success' => false,
+                'message' => 'يجب اختيار عيادة نشطة'
+            ], 422);
+        }
+
+        DB::transaction(function () use ($consultation, $clinic) {
+            $consultation->update(['status' => 'reviewed']);
+
+            Order_Clinic::create([
+                'consultation_id' => $consultation->id,
+                'clinic_id' => $clinic->id,
+                'status' => 'pending'
+            ]);
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تم إعادة تحويل الاستشارة بنجاح',
+            'data' => [
+                'consultation' => $consultation,
+                'new_clinic' => $clinic
+            ]
+        ]);
+    }
+
+    /**
+     * دالة مساعدة لإرسال الإشعارات
+     */
     private function sendNotification($userId, $message, $consultationId, $isAdmin = false)
     {
         $notification = User_Notification::create([
@@ -290,7 +352,6 @@ class ConsultationController extends Controller
         ]))->toOthers();
     }
 
-
     /**
      * التحقق من وجود اشتراك فعال للمستخدم
      */
@@ -308,99 +369,10 @@ class ConsultationController extends Controller
             ];
         }
 
-        // يمكنك إضافة المزيد من الشروط هنا إذا لزم الأمر
-        // مثل التحقق من نوع الاشتراك أو عدد الاستشارات المتبقية
-
         return [
             'success' => true,
             'message' => 'User has active subscription',
             'subscription' => $activeSubscription
         ];
     }
-
-
-
-    /**
- * إعادة تحويل الاستشارة إلى عيادة أخرى
- */
-public function reassignToClinic($consultationId)
-{
-    $consultation = Consultation::find($consultationId);
-
-    // التحقق من وجود الاستشارة
-    if (!$consultation) {
-        return response()->json([
-            'success' => false,
-            'message' => 'الاستشارة غير موجودة'
-        ], 404);
-    }
-
-    // التحقق من أن حالة الاستشارة مرفوضة
-    if ($consultation->status !== 'disapproved') {
-        return response()->json([
-            'success' => false,
-            'message' => 'لا يمكن إعادة التحويل إلا للاستشارات المرفوضة'
-        ], 400);
-    }
-
-    $validator = Validator::make(request()->all(), [
-        'clinic_id' => 'required|exists:clinics,id',
-    ], [
-        'clinic_id.required' => 'معرف العيادة مطلوب',
-        'clinic_id.exists' => 'العيادة المحددة غير موجودة',
-
-    ]);
-
-    if ($validator->fails()) {
-        return response()->json([
-            'success' => false,
-            'errors' => $validator->errors()
-        ], 422);
-    }
-
-    $clinic = Clinic::find(request('clinic_id'));
-
-    // التحقق من أن العيادة نشطة
-    if (!$clinic || $clinic->status !== 'active') {
-        return response()->json([
-            'success' => false,
-            'message' => 'يجب اختيار عيادة نشطة'
-        ], 422);
-    }
-
-    DB::beginTransaction();
-    try {
-        // تحديث حالة الاستشارة
-        $consultation->update([
-            'status' => 'reviewed',
-        ]);
-
-        // إنشاء سجل جديد في Order_Clinic
-        $order = Order_Clinic::create([
-            'consultation_id' => $consultation->id,
-            'clinic_id' => $clinic->id,
-            'status' => 'pending',
-        ]);
-
-        DB::commit();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'تم إعادة تحويل الاستشارة إلى العيادة الجديدة بنجاح',
-            'data' => [
-                'consultation' => $consultation,
-                'new_clinic' => $clinic,
-                'order' => $order
-            ]
-        ]);
-
-    } catch (\Exception $e) {
-        DB::rollBack();
-        return response()->json([
-            'success' => false,
-            'message' => 'حدث خطأ أثناء إعادة التحويل',
-            'error' => $e->getMessage()
-        ], 500);
-    }
-}
 }

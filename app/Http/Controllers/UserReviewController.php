@@ -14,8 +14,11 @@ class UserReviewController extends Controller
     // الحصول على تقييمات المستخدم
     public function getUserRatings(Request $request)
     {
+        $perPage = $request->get('per_page', 15); // 15 عنصر في الصفحة افتراضياً
+
         $query = User_Review::where('user_id', Auth::id())
-            ->with('clinic');
+            ->with('clinic')
+            ->latest();
 
         if ($request->has('status')) {
             $query->where('status', $request->status);
@@ -25,9 +28,17 @@ class UserReviewController extends Controller
             $query->where('clinic_id', $request->clinic_id);
         }
 
-        $ratings = $query->get();
+        $ratings = $query->paginate($perPage);
 
-        return response()->json($ratings);
+        return response()->json([
+            'data' => $ratings->items(),
+            'meta' => [
+                'current_page' => $ratings->currentPage(),
+                'last_page' => $ratings->lastPage(),
+                'per_page' => $ratings->perPage(),
+                'total' => $ratings->total(),
+            ]
+        ]);
     }
 
     // تحديث التقييم
@@ -81,31 +92,43 @@ class UserReviewController extends Controller
     // الحصول على تقييمات العيادة
     public function getClinicRatings(Request $request)
     {
-        $user=Auth::user();
-        $clinic =$user->clinic;
+        $perPage = $request->get('per_page', 15); // 15 عنصر في الصفحة افتراضياً
+
+        $user = Auth::user();
+        $clinic = $user->clinic;
 
         if (!$clinic) {
             return response()->json(['message' => 'Clinic not found'], 404);
         }
 
-        $query = $clinic->user_review()->where('status', 'completed')
-            ->with('user');
+        $query = $clinic->user_review()
+            ->where('status', 'completed')
+            ->with('user')
+            ->latest();
 
         if ($request->has('sort')) {
             $query->orderBy('rating', $request->sort);
-        } else {
-            $query->latest();
         }
 
-        $ratings = $query->get();
+        $ratings = $query->paginate($perPage);
 
-        return response()->json($ratings);
+        return response()->json([
+            'data' => $ratings->items(),
+            'meta' => [
+                'current_page' => $ratings->currentPage(),
+                'last_page' => $ratings->lastPage(),
+                'per_page' => $ratings->perPage(),
+                'total' => $ratings->total(),
+            ]
+        ]);
     }
-
     // الحصول على جميع التقييمات (للمسؤول)
     public function getAllRatings(Request $request)
     {
-        $query = User_Review::with(['user', 'clinic']);
+        $perPage = $request->get('per_page', 15); // 15 عنصر في الصفحة افتراضياً
+
+        $query = User_Review::with(['user', 'clinic'])
+            ->latest();
 
         if ($request->has('status')) {
             $query->where('status', $request->status);
@@ -119,11 +142,18 @@ class UserReviewController extends Controller
             $query->where('clinic_id', $request->clinic_id);
         }
 
-        $ratings = $query->get();
+        $ratings = $query->paginate($perPage);
 
-        return response()->json($ratings);
+        return response()->json([
+            'data' => $ratings->items(),
+            'meta' => [
+                'current_page' => $ratings->currentPage(),
+                'last_page' => $ratings->lastPage(),
+                'per_page' => $ratings->perPage(),
+                'total' => $ratings->total(),
+            ]
+        ]);
     }
-
     // حذف التقييم (للمسؤول)
     public function adminDestroy($id)
     {
