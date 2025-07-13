@@ -35,23 +35,21 @@ class RegisterController extends Controller
     {
         $validatedData = $request->validated();
 
-        // Pass the modified request data to the service
         $user = $this->userService->register($validatedData);
 
-       if (isset($validatedData['email'])) {
+        // Send OTP
+        if (isset($validatedData['email'])) {
             OtpHelper::sendOtpEmail($user->id);
-        }elseif(isset($validatedData['phone']))
-        {
+        } elseif (isset($validatedData['phone'])) {
             $this->sendOtp_mobile($user->id);
         }
 
         return response()->json([
-            'message' => 'User  registered successfully',
-            'user' => $user,
+            'message' => 'User registered successfully',
+            'user' => $user->only(['id', 'name', 'email', 'phone', 'image', 'type']),
+            'access_token' => $user->token
         ], 201);
     }
-
-
 
 
 

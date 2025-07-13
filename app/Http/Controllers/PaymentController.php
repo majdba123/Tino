@@ -17,7 +17,7 @@ class PaymentController extends Controller
 {
     protected $paypalContext;
 
-    public function __construct()
+  /*  public function __construct()
     {
         // تهيئة سياق PayPal
         $this->paypalContext = new ApiContext(
@@ -27,7 +27,7 @@ class PaymentController extends Controller
             )
         );
         $this->paypalContext->setConfig(['mode' => env('PAYPAL_MODE', 'sandbox')]);
-    }
+    }*/
 
     public function success($subscriptionId)
     {
@@ -70,6 +70,11 @@ class PaymentController extends Controller
                 }
             }
 
+            Payment::where('user_subscription_id', $subscription->id)
+            ->update(['status' => 'failed']);
+
+            User_Subscription::where('id', $subscription->id)
+            ->update(['payment_status' => 'failed']);
             return response()->json([
                 'success' => false,
                 'message' => 'لم يتم تأكيد الدفع بعد',
@@ -78,6 +83,11 @@ class PaymentController extends Controller
 
         } catch (\Exception $e) {
             Log::error('Payment processing error: ' . $e->getMessage());
+            Payment::where('user_subscription_id', $subscription->id)
+            ->update(['status' => 'failed']);
+
+            User_Subscription::where('id', $subscription->id)
+            ->update(['payment_status' => 'failed']);
             return response()->json([
                 'success' => false,
                 'message' => 'حدث خطأ أثناء معالجة الدفع',
@@ -113,7 +123,11 @@ class PaymentController extends Controller
                 'status' => Payment::STATUS_FAILED,
                 'details' => ['reason' => 'user_cancelled']
             ]);
+            Payment::where('user_subscription_id', $subscription->id)
+            ->update(['status' => 'failed']);
 
+            User_Subscription::where('id', $subscription->id)
+            ->update(['payment_status' => 'failed']);
             return response()->json([
                 'success' => false,
                 'message' => 'تم إلغاء عملية الدفع',
@@ -125,6 +139,11 @@ class PaymentController extends Controller
             ]);
 
         } catch (\Exception $e) {
+            Payment::where('user_subscription_id', $subscription->id)
+            ->update(['status' => 'failed']);
+
+            User_Subscription::where('id', $subscription->id)
+            ->update(['payment_status' => 'failed']);
             Log::error('Cancel subscription error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,

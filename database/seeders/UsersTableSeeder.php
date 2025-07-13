@@ -22,6 +22,8 @@ class UsersTableSeeder extends Seeder
             'password' => Hash::make('password'),
             'type' => "admin",
                         'email_verified_at' => now(), // إضافة هذا السطر
+                        'otp' => 1, // إضافة هذا السطر
+
 
         ]);
 
@@ -34,6 +36,8 @@ class UsersTableSeeder extends Seeder
             'password' => Hash::make('password'),
             'type' => 0,
                         'email_verified_at' => now(), // إضافة هذا السطر
+                        'otp' => 1, // إضافة هذا السطر
+
 
         ]);
 
@@ -46,6 +50,8 @@ class UsersTableSeeder extends Seeder
             'password' => Hash::make('password'),
             'type' => 3,
                         'email_verified_at' => now(), // إضافة هذا السطر
+                        'otp' => 1, // إضافة هذا السطر
+
 
         ]);
 
@@ -56,6 +62,8 @@ class UsersTableSeeder extends Seeder
             'password' => Hash::make('password'),
             'type' => 3,
                         'email_verified_at' => now(), // إضافة هذا السطر
+                        'otp' => 1, // إضافة هذا السطر
+
 
         ]);
 

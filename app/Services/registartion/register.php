@@ -21,38 +21,32 @@ class register
      */
     public function register(array $data): User
     {
-        // تحقق من وجود البريد الإلكتروني أو رقم الهاتف
-        if (isset($data['email']) && !isset($data['phone'])) {
-            // إنشاء المستخدم باستخدام البريد الإلكتروني
-            $user = User::create([
-                'name' => $data['name'],
-                'email' => $data['email'],
-                'password' => Hash::make($data['password']),
-            ]);
-        } elseif (!isset($data['email']) && isset($data['phone'])) {
-            // إنشاء المستخدم باستخدام رقم الهاتف
-            $user = User::create([
-                'name' => $data['name'],
-                'phone' => $data['phone'],
-                'password' => Hash::make($data['password']),
-            ]);
-        } else {
-            // إذا كانت البيانات تحتوي على البريد الإلكتروني ورقم الهاتف أو لا تحتوي على أي منهما، يمكنك التعامل مع ذلك هنا
+        // Validate that either email or phone is provided (but not both)
+        if (!isset($data['email']) && !isset($data['phone'])) {
             throw new \Exception('يجب أن تحتوي البيانات إما على البريد الإلكتروني أو رقم الهاتف.');
         }
 
-        // تحقق من نوع المستخدم وأنشئ السجلات الإضافية إذا لزم الأمر
-    /*    switch ($data['type']) {
-            case 0:
-                // النوع 0: فقط إنشاء مستخدم
-                break;
-            default:
-                throw new \InvalidArgumentException('نوع المستخدم غير صالح');
-        }*/
+        // Create user data array
+        $userData = [
+            'name' => $data['name'],
+            'password' => Hash::make($data['password']),
+        ];
+
+        // Set email or phone based on input
+        if (isset($data['email'])) {
+            $userData['email'] = $data['email'];
+        } else {
+            $userData['phone'] = $data['phone'];
+        }
+
+        // Create the user
+        $user = User::create($userData);
+
+        // Create and attach access token
+        $user->token = $user->createToken($user->name . '-AuthToken')->plainTextToken;
 
         return $user;
     }
-
 
 
     public function verifyOtp(string $otp, User $user): bool
