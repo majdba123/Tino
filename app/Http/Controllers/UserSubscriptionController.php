@@ -75,7 +75,7 @@ class UserSubscriptionController extends Controller
     {
         $user = Auth::user();
 
-        $subscriptions = User_Subscription::with('subscription')
+        $subscriptions = User_Subscription::with('user','payment','subscription')
             ->where('user_id', $user->id)
             ->orderBy('created_at', 'desc')
             ->get();

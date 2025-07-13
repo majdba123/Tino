@@ -125,7 +125,7 @@ class SubscriptionController extends Controller
     {
         $perPage = $request->input('per_page', 15); // 15 عنصراً في الصفحة افتراضياً
 
-        $query = User_Subscription::with(['user', 'subscription'])
+        $query = User_Subscription::with(['user', 'subscription','payment'])
             ->where('is_active', true)
             ->latest();
 
