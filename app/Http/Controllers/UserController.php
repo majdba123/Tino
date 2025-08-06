@@ -94,10 +94,21 @@ class UserController extends Controller
             }
 
             if ($request->hasFile('image')) {
-                if ($user->image && Storage::exists($user->image)) {
-                    Storage::delete($user->image);
+                // حذف الصورة القديمة إذا كانت موجودة
+                if ($user->image) {
+                    $oldImagePath = str_replace(url('api/storage/'), '', $user->image);
+                    if (Storage::disk('public')->exists($oldImagePath)) {
+                        Storage::disk('public')->delete($oldImagePath);
+                    }
                 }
-                $data['image'] = $request->file('image')->store('public/users/images');
+
+                // حفظ الصورة الجديدة بنفس الطريقة المستخدمة في دالة store
+                $imageFile = $request->file('image');
+                $imageName = Str::random(32).'.'.$imageFile->getClientOriginalExtension();
+                $imagePath = 'users/' . $imageName;
+                Storage::disk('public')->put($imagePath, file_get_contents($imageFile));
+
+                $data['image'] = url('api/storage/' . $imagePath);
             }
 
             $user->update($data);
@@ -113,13 +124,10 @@ class UserController extends Controller
                     'location' => [
                         'lat' => $user->lat,
                         'lang' => $user->lang
-                    ]
+                    ],
+                    'image' => $user->image
                 ]
             ];
-
-            if ($user->image) {
-                $response['data']['image'] = Storage::url($user->image);
-            }
 
             return response()->json($response);
 

@@ -53,6 +53,18 @@ Route::middleware(['throttle:api'])->group(function () {
         return $request->user();
     });
 
+
+    Route::get('/storage/{path}', function ($path) {
+        $filePath = storage_path('app/public/' . $path);
+
+        if (!File::exists($filePath)) {
+            abort(404);
+        }
+
+        return response()->file($filePath);
+    })->where('path', '.*');
+
+
     Route::post('/register', [RegisterController::class, 'register']);
     Route::post('/login', [LoginController::class, 'login']);
     Route::post('/verify_otp', [RegisterController::class, 'verfication_otp'])->middleware('auth:sanctum');
@@ -83,7 +95,8 @@ Route::middleware(['auth:sanctum', 'banned', 'throttle:api'])->group(function ()
         });
 
         Route::post('pets/store', [PetController::class, 'store'])->middleware('otp');
-        Route::put('pets/update/{id}', [PetController::class, 'updatePet'])->middleware('otp');
+        Route::post('pets/update/{id}', [PetController::class, 'updatePet'])->middleware('otp');
+        Route::get('pets/show/{id}', [PetController::class, 'show']);
 
         Route::get('pets/get_all', [PetController::class, 'index']);
         Route::post('/medical-records/store', [MedicalRecordController::class, 'store']);
@@ -91,6 +104,8 @@ Route::middleware(['auth:sanctum', 'banned', 'throttle:api'])->group(function ()
 
         Route::prefix('consultations')->group(function () {
             Route::post('store/', [ConsultationController::class, 'store'])->middleware('otp');
+            Route::post('cancell/{id}/', [ConsultationController::class, 'cancell_con'])->middleware('otp');
+
             Route::get('get_all/', [ConsultationController::class, 'index'])->middleware('otp');
             Route::get('/show/{id}', [ConsultationController::class, 'show']);
         });

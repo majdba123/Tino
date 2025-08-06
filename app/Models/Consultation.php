@@ -15,7 +15,13 @@ class Consultation extends Model
         'description',
         'admin_notes',
         'operation',
-        'status'
+        'status',
+        'level_urgency',
+        'contact_method',
+        'type_con',
+        'data_available',
+
+
     ];
 
     const STATUS_PENDING = 'pending';

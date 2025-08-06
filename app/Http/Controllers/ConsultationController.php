@@ -35,6 +35,11 @@ class ConsultationController extends Controller
         $validator = Validator::make($request->all(), [
             'pet_id' => 'required|exists:pets,id,user_id,'.Auth::id(),
             'description' => 'required|string|max:1000',
+            'level_urgency' => 'required|in:low,medium,high', // قيم محددة: منخفض، متوسط، عالي
+            'contact' => 'required|in:phone,video_call', // قيم محددة: هاتف أو مكالمة فيديو
+            'data_available' => 'required|string|max:1000',
+            'type_con' => 'required|in:normal,emergency',
+
         ]);
 
         if ($validator->fails()) {
@@ -49,6 +54,10 @@ class ConsultationController extends Controller
             'pet_id' => $request->pet_id,
             'operation' => "none",
             'description' => $request->description,
+            'level_urgency' => $request->level_urgency, // إضافة مستوى الطوارئ
+            'contact_method' => $request->contact, // إضافة طريقة التواصل
+            'data_available' => $request->data_available,
+            'type_con' => $request->type_con,
             'status' => Consultation::STATUS_PENDING,
         ]);
 
@@ -128,6 +137,52 @@ class ConsultationController extends Controller
         return response()->json([
             'success' => true,
             'data' => $consultation
+        ]);
+    }
+    public function cancell_con($id)
+    {
+        $consultation = Consultation::with('pet')->find($id);
+
+        if (!$consultation) {
+            return response()->json([
+                'success' => false,
+                'message' => 'الاستشارة غير موجودة'
+            ], 404);
+        }
+
+        // التحقق من الصلاحية: إما أن يكون المستخدم admin أو صاحب الاستشارة أو نوعه 2
+        if (Auth::user()->type !== 'admin' && $consultation->user_id !== Auth::id() && Auth::user()->type !== '2') {
+            return response()->json([
+                'success' => false,
+                'message' => 'غير مصرح بالوصول'
+            ], 403);
+        }
+
+        // التحقق مما إذا كانت الاستشارة قابلة للإلغاء (ليست مكتملة أو ملغاة مسبقاً)
+        if ($consultation->status === 'completed') {
+            return response()->json([
+                'success' => false,
+                'message' => 'لا يمكن إلغاء استشارة مكتملة'
+            ], 400);
+        }
+
+        if ($consultation->status === 'cancelled') {
+            return response()->json([
+                'success' => false,
+                'message' => 'الاستشارة ملغاة بالفعل'
+            ], 400);
+        }
+
+        // تحديث حالة الاستشارة إلى "ملغاة"
+        $consultation->update([
+            'status' => 'cancelled',
+            'cancelled_at' => now() // يمكنك إضافة حقل cancelled_at لتسجيل وقت الإلغاء
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تم إلغاء الاستشارة بنجاح',
+            'data' => $consultation->fresh()
         ]);
     }
 

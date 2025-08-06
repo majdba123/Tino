@@ -5,19 +5,21 @@ namespace App\Http\Controllers;
 use App\Models\Pet;
 use App\Models\DiscountCoupon;
 use App\Http\Requests\PetRequest;
+use App\Http\Requests\Petupdate;
+
 use Illuminate\Support\Str;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 
 class PetController extends Controller
 {
 
     public function store(PetRequest $request)
     {
-
         $activeSubscription = auth()->user()->User_Subscription()
-        ->active()
-        ->exists();
+            ->active()
+            ->exists();
 
         if (!$activeSubscription) {
             return response()->json([
@@ -31,6 +33,15 @@ class PetController extends Controller
 
         // إضافة القيمة الافتراضية للحالة إذا لم يتم إرسالها
         $data['status'] = $data['status'] ?? 'active';
+
+        // حفظ الصورة بنفس الطريقة المستخدمة سابقاً
+        if ($request->hasFile('image')) {
+            $imageFile = $request->file('image');
+            $imageName = Str::random(32).'.'.$imageFile->getClientOriginalExtension();
+            $imagePath = 'pets/' . $imageName;
+            Storage::disk('public')->put($imagePath, file_get_contents($imageFile));
+            $data['image'] = url('api/storage/' . $imagePath);
+        }
 
         // إنشاء الحيوان الأليف
         $pet = Pet::create($data);
@@ -55,7 +66,6 @@ class PetController extends Controller
             ]
         ], 201);
     }
-
     public function show($id)
     {
         $pet = Pet::with(['user', 'medicalRecords'])->findOrFail($id);
@@ -75,12 +85,11 @@ class PetController extends Controller
             'data' => $pets
         ]);
     }
+    public function updatePet(Petupdate $request, $id)
+    {
+        $user = Auth::user();
 
-public function updatePet(PetRequest $request, $id)
-{
-
-        $user=Auth::user();
-        // 2. البحث عن الحيوان والتحقق من ملكيته للمستخدم
+        // البحث عن الحيوان والتحقق من ملكيته للمستخدم
         $pet = Pet::where('user_id', $user->id)->find($id);
 
         if (!$pet) {
@@ -90,7 +99,7 @@ public function updatePet(PetRequest $request, $id)
             ], 404);
         }
 
-        // 3. تحديث البيانات مع التحقق من الحقول المطلوبة
+        // تحديث البيانات مع التحقق من الحقول المطلوبة
         $data = $request->only([
             'name',
             'type',
@@ -102,22 +111,40 @@ public function updatePet(PetRequest $request, $id)
             'status'
         ]);
 
-        // 4. التحقق من وجود بيانات للتحديث
-        if (empty($data)) {
+        // معالجة صورة الحيوان الأليف
+        if ($request->hasFile('image')) {
+            // حذف الصورة القديمة إذا كانت موجودة
+            if ($pet->image) {
+                $oldImagePath = str_replace(url('api/storage/'), '', $pet->image);
+                if (Storage::disk('public')->exists($oldImagePath)) {
+                    Storage::disk('public')->delete($oldImagePath);
+                }
+            }
+
+            // حفظ الصورة الجديدة بنفس الطريقة المستخدمة سابقاً
+            $imageFile = $request->file('image');
+            $imageName = Str::random(32).'.'.$imageFile->getClientOriginalExtension();
+            $imagePath = 'pets/' . $imageName;
+            Storage::disk('public')->put($imagePath, file_get_contents($imageFile));
+            $data['image'] = url('api/storage/' . $imagePath);
+        }
+
+        // التحقق من وجود بيانات للتحديث
+        if (empty($data) && !$request->hasFile('image')) {
             return response()->json([
                 'success' => false,
                 'message' => 'لم يتم تقديم أي بيانات للتحديث'
             ], 400);
         }
 
-        // 5. تنفيذ التحديث
+        // تنفيذ التحديث
         $pet->update($data);
 
-        // 6. إرجاع النتيجة مع بيانات محدثة
+        // إرجاع النتيجة مع بيانات محدثة
         return response()->json([
             'success' => true,
             'message' => 'تم تحديث معلومات الحيوان الأليف بنجاح',
             'data' => $pet->fresh()
         ]);
-}
+    }
 }

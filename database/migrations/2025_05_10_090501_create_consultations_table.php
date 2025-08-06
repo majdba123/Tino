@@ -19,6 +19,11 @@ return new class extends Migration
             $table->text('operation')->default('none');
             $table->text('admin_notes')->nullable();
             $table->string('status')->default('pending');
+            $table->string('level_urgency');
+            $table->string('contact_method');
+            $table->string('type_con');
+            $table->string('data_available');
+
             $table->timestamps();
         });
     }

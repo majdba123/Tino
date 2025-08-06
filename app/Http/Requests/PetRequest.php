@@ -22,7 +22,9 @@ class PetRequest extends FormRequest
             'birth_date' => 'required|date|before_or_equal:today',
             'gender' => 'required|in:male,female',
             'health_status' => 'required|in:excellent,good,fair,poor',
-            'status' => 'sometimes|in:active,inactive,deceased'
+            'status' => 'sometimes|in:active,inactive,deceased',
+            'image' => 'sometimes|image|mimes:jpeg,png,jpg,gif|max:2048' // إضافة حقل الصورة
+
         ];
 
         // إذا كانت الطريقة PATCH أو PUT (تحديث) نجعل الحقول غير مطلوبة

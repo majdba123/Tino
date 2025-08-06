@@ -13,6 +13,7 @@ class Pet extends Model
         'name',
         'type',
         'birth_date',
+        'image',
         'gender',
         'name_cheap',
         'breed',

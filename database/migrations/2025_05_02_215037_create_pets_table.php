@@ -19,6 +19,8 @@ return new class extends Migration
             $table->string('breed'); // نوع الحيوان (كلب، قطة، إلخ)
             $table->date('birth_date')->nullable(); // تاريخ الميلاد بدلاً من العمر
             $table->enum('gender', ['male', 'female']); // الجنس
+            $table->string('image')->nullable();
+
             $table->enum('health_status', ['excellent', 'good', 'fair', 'poor']); // الحالة الصحية
             $table->enum('status', ['active', 'inactive', 'deceased'])->default('active'); // الحالة
             $table->foreignId('user_id')->constrained()->onDelete('cascade');

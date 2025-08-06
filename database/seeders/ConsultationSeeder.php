@@ -23,7 +23,13 @@ class ConsultationSeeder extends Seeder
                 'pet_id' => 1,
                 'description' => 'وصف الاستشارة ' . Str::random(20),
                 'operation' => "none",
-                'status' =>"pending"
+                'status' =>"pending",
+                'level_urgency' =>"pending",
+                'contact_method' =>"pending",
+                'type_con' =>"pending",
+                'data_available' =>"pending",
+
+
             ]);
 
         // يمكن إضافة المزيد من الاستشارات باستخدام Factory إذا لزم الأمر
