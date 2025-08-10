@@ -17,16 +17,6 @@ class PetController extends Controller
 
     public function store(PetRequest $request)
     {
-        $activeSubscription = auth()->user()->User_Subscription()
-            ->active()
-            ->exists();
-
-        if (!$activeSubscription) {
-            return response()->json([
-                'success' => false,
-                'message' => 'يجب أن يكون لديك اشتراك فعال لإضافة حيوان أليف'
-            ], 403);
-        }
 
         $data = $request->validated();
         $data['user_id'] = auth()->id();
@@ -46,29 +36,18 @@ class PetController extends Controller
         // إنشاء الحيوان الأليف
         $pet = Pet::create($data);
 
-        // توليد كوبون الخصم
-        $coupon = DiscountCoupon::create([
-            'code' => 'PET25-' . Str::upper(Str::random(6)),
-            'discount_percent' => 25,
-            'expires_at' => Carbon::now()->addMonths(6),
-            'user_id' => auth()->id(),
-            'is_used' => false
-        ]);
+
 
         return response()->json([
             'success' => true,
             'message' => 'تم إضافة الحيوان الأليف بنجاح!',
             'pet' => $pet->load('user'),
-            'coupon' => [
-                'code' => $coupon->code,
-                'discount' => '25%',
-                'expires_at' => $coupon->expires_at->format('Y-m-d')
-            ]
+
         ], 201);
     }
     public function show($id)
     {
-        $pet = Pet::with(['user', 'medicalRecords'])->findOrFail($id);
+        $pet = Pet::with(['user', 'medicalRecords','user_subscriptionn'])->findOrFail($id);
 
         return response()->json([
             'success' => true,
@@ -78,7 +57,7 @@ class PetController extends Controller
     }
     public function index()
     {
-        $pets = auth()->user()->pets()->with('medicalRecords')->get();
+        $pets = auth()->user()->pets()->with('medicalRecords','user_subscriptionn')->get();
 
         return response()->json([
             'success' => true,

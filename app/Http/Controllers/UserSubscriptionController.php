@@ -1,6 +1,9 @@
 <?php
 
 namespace App\Http\Controllers;
+use App\Models\DiscountCoupon;
+use Carbon\Carbon;
+use Illuminate\Support\Str;
 
 use App\Models\User_Subscription;
 use Illuminate\Http\Request;
@@ -30,9 +33,18 @@ class UserSubscriptionController extends Controller
             $request->user(),
             $request->subscription_id,
             $request->discount_code,
-            $request->payment_method ?? 'stripe' // القيمة الافتراضية stripe
-        );
+            $request->payment_method ?? 'stripe', // القيمة الافتراضية stripe
+            $request->pet_id,
 
+        );
+                // توليد كوبون الخصم
+        $coupon = DiscountCoupon::create([
+            'code' => 'PET25-' . Str::upper(Str::random(6)),
+            'discount_percent' => 25,
+            'expires_at' => Carbon::now()->addMonths(6),
+            'user_id' => auth()->id(),
+            'is_used' => false
+        ]);
         return response()->json([
             'success' => $subscription['success'],
             'payment_url' => $subscription['payment_url'] ?? null,
@@ -75,7 +87,7 @@ class UserSubscriptionController extends Controller
     {
         $user = Auth::user();
 
-        $subscriptions = User_Subscription::with('user','payment','subscription')
+        $subscriptions = User_Subscription::with('user','payment','subscription','pet')
             ->where('user_id', $user->id)
             ->orderBy('created_at', 'desc')
             ->get();

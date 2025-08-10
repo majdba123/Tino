@@ -24,7 +24,7 @@ class ConsultationController extends Controller
      */
     public function store(Request $request)
     {
-        $subscriptionCheck = $this->checkActiveSubscription(Auth::id());
+        $subscriptionCheck = $this->checkActiveSubscription(Auth::id(),$request->pet_id);
         if (!$subscriptionCheck['success']) {
             return response()->json([
                 'success' => false,
@@ -33,39 +33,47 @@ class ConsultationController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'pet_id' => 'required|exists:pets,id,user_id,'.Auth::id(),
+            'pet_id' => [
+                'required',
+                'exists:pets,id,user_id,'.Auth::id(),
+                function ($attribute, $value, $fail) {
+                    $pet = Pet::find($value);
+                    if (!$pet->user_subscriptionn || !$pet->user_subscriptionn->is_active) {
+                        $fail('هذا الحيوان ليس لديه اشتراك نشط');
+                    }
+                }
+            ],
             'description' => 'required|string|max:1000',
-            'level_urgency' => 'required|in:low,medium,high', // قيم محددة: منخفض، متوسط، عالي
-            'contact' => 'required|in:phone,video_call', // قيم محددة: هاتف أو مكالمة فيديو
+            'level_urgency' => 'required|in:low,medium,high',
+            'contact' => 'required|in:phone,video_call',
             'data_available' => 'required|string|max:1000',
             'type_con' => 'required|in:normal,emergency',
-
         ]);
 
-        if ($validator->fails()) {
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $consultation = Consultation::create([
+                'user_id' => Auth::id(),
+                'pet_id' => $request->pet_id,
+                'operation' => "none",
+                'description' => $request->description,
+                'level_urgency' => $request->level_urgency, // إضافة مستوى الطوارئ
+                'contact_method' => $request->contact, // إضافة طريقة التواصل
+                'data_available' => $request->data_available,
+                'type_con' => $request->type_con,
+                'status' => Consultation::STATUS_PENDING,
+            ]);
+
             return response()->json([
-                'success' => false,
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
-        $consultation = Consultation::create([
-            'user_id' => Auth::id(),
-            'pet_id' => $request->pet_id,
-            'operation' => "none",
-            'description' => $request->description,
-            'level_urgency' => $request->level_urgency, // إضافة مستوى الطوارئ
-            'contact_method' => $request->contact, // إضافة طريقة التواصل
-            'data_available' => $request->data_available,
-            'type_con' => $request->type_con,
-            'status' => Consultation::STATUS_PENDING,
-        ]);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'تم إنشاء الاستشارة بنجاح',
-            'data' => $consultation
-        ], 201);
+                'success' => true,
+                'message' => 'تم إنشاء الاستشارة بنجاح',
+                'data' => $consultation
+            ], 201);
     }
 
     /**
@@ -75,7 +83,7 @@ class ConsultationController extends Controller
     {
         $perPage = $request->input('per_page', 10); // 10 عناصر في الصفحة افتراضياً
 
-        $query = Consultation::with(['pet', 'anwer_cons'])
+        $query = Consultation::with(['pet.user_subscriptionn', 'anwer_cons'])
             ->latest();
 
         if (Auth::user()->type !== 'admin' && Auth::user()->type !== '2') {
@@ -118,7 +126,7 @@ class ConsultationController extends Controller
      */
     public function show($id)
     {
-        $consultation = Consultation::with('pet')->find($id);
+        $consultation = Consultation::with('pet.user_subscriptionn')->find($id);
 
         if (!$consultation) {
             return response()->json([
@@ -141,7 +149,7 @@ class ConsultationController extends Controller
     }
     public function cancell_con($id)
     {
-        $consultation = Consultation::with('pet')->find($id);
+        $consultation = Consultation::with('pet.user_subscriptionn')->find($id);
 
         if (!$consultation) {
             return response()->json([
@@ -199,7 +207,12 @@ class ConsultationController extends Controller
                 'message' => 'الاستشارة غير موجودة'
             ], 404);
         }
-
+        if (!$consultation->pet || !$consultation->pet->user_subscriptionn) {
+            return response()->json([
+                'success' => false,
+                'message' => 'لا يمكن إجراء العملية، الحيوان ليس لديه اشتراك فعال'
+            ], 403);
+        }
         $validator = Validator::make(request()->all(), [
             'operation' => 'required|in:call,inside,outside',
             'admin_notes' => 'required_if:operation,call,outside,inside|string',
@@ -410,11 +423,12 @@ class ConsultationController extends Controller
     /**
      * التحقق من وجود اشتراك فعال للمستخدم
      */
-    private function checkActiveSubscription($userId)
+    private function checkActiveSubscription($userId ,$pet_id)
     {
         $activeSubscription = User_Subscription::where('user_id', $userId)
             ->where('end_date', '>=', now())
             ->where('is_active', true)
+            ->where('pet_id', $pet_id)
             ->first();
 
         if (!$activeSubscription) {

@@ -14,10 +14,10 @@ use Stripe\Checkout\Session;
 class UserSubscriptionService
 {
 
-public function subscribeUser($user, $subscriptionId, $discountCode = null, $paymentMethod = 'stripe')
+public function subscribeUser($user, $subscriptionId, $discountCode = null, $paymentMethod = 'stripe', $pet_id)
 {
     try {
-        return DB::transaction(function () use ($user, $subscriptionId, $discountCode, $paymentMethod) {
+        return DB::transaction(function () use ($user, $subscriptionId, $discountCode, $paymentMethod,$pet_id) {
             $subscription = Subscription::findOrFail($subscriptionId);
 
             if (!$subscription->is_active) {
@@ -59,7 +59,9 @@ public function subscribeUser($user, $subscriptionId, $discountCode = null, $pay
                 'remaining_visits' => 0,
                 'is_active' => User_Subscription::STATUS_PENDING,
                 'payment_method' => $paymentMethod,
-                'payment_status' => 'pending'
+                'payment_status' => 'pending',
+                'pet_id' => $pet_id
+
             ]);
 
             if ($paymentMethod == 'stripe') {

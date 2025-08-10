@@ -47,4 +47,17 @@ class Pet extends Model
     {
         return $this->hasMany(Consultation::class);
     }
+
+
+    public function User_Subscription()
+    {
+        return $this->hasOne(User_Subscription::class);
+    }
+
+
+    public function user_subscriptionn()
+    {
+        return $this->hasOne(User_Subscription::class, 'pet_id')->where('is_active', true);
+    }
+
 }

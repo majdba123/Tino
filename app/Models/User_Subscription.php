@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class User_Subscription extends Model
 {
@@ -21,6 +22,7 @@ class User_Subscription extends Model
         'subscription_id',
         'start_date',
         'end_date',
+        'pet_id',
         'remaining_calls',
         'remaining_visits',
         'price_paid',
@@ -59,4 +61,12 @@ class User_Subscription extends Model
     {
         return $this->hasOne(Payment::class);
     }
+
+
+
+    public function pet()
+    {
+        return $this->belongsTo(Pet::class , 'pet_id');
+    }
+
 }

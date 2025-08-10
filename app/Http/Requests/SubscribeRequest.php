@@ -20,7 +20,8 @@ class SubscribeRequest extends FormRequest
                 'exists:subscriptions,id',
                 Rule::exists('subscriptions', 'id')->where('is_active', true)
             ],
-            'discount_code' => 'nullable|string|exists:discount_coupons,code'
+            'discount_code' => 'nullable|string|exists:discount_coupons,code',
+            'pet_id' => 'required|string|exists:pets,id'
 
 
         ];
