@@ -27,7 +27,7 @@ class User_Subscription extends Model
         'remaining_visits',
         'price_paid',
         'is_active',
-
+        'stop_at',
 
         'payment_method',
         'payment_status',
@@ -59,9 +59,14 @@ class User_Subscription extends Model
 
     public function payment()
     {
-        return $this->hasOne(Payment::class);
+        return $this->hasOne(Payment::class, 'user_subscription_id');
     }
 
+
+    public function Refound()
+    {
+        return $this->hasMany(Refound::class);
+    }
 
 
     public function pet()

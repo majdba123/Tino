@@ -114,6 +114,10 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasMany(User_Notification::class);
     }
 
+    public function Refound()
+    {
+        return $this->hasMany(Refound::class);
+    }
 
 
 }

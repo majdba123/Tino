@@ -33,7 +33,7 @@ class Payment extends Model
 
     public function userSubscription()
     {
-        return $this->belongsTo(User_Subscription::class);
+        return $this->belongsTo(User_Subscription::class,'user_subscription_id');
     }
 
     // حالات الدفع

@@ -23,6 +23,8 @@ use App\Http\Controllers\UserReviewController;
 use App\Http\Controllers\ForgetPasswordController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\RefoundController;
+use App\Http\Controllers\CouponController;
 
 use App\Helpers\OtpHelper;
 
@@ -91,6 +93,8 @@ Route::middleware(['auth:sanctum', 'banned', 'throttle:api'])->group(function ()
             Route::get('show/{id}', [SubscriptionController::class, 'show']);
 
             Route::post('subscribe/', [UserSubscriptionController::class, 'subscribe'])->middleware('otp');
+            Route::post('stopedsubscribe/{id}', [UserSubscriptionController::class, 'stopedsubscribe'])->middleware('otp');
+
             Route::get('get_my_all', [UserSubscriptionController::class, 'get_my_all']);
         });
 
@@ -124,6 +128,13 @@ Route::middleware(['auth:sanctum', 'banned', 'throttle:api'])->group(function ()
             Route::get('/get_all', [UserReviewController::class, 'getUserRatings'])->middleware('otp');
             Route::put('/update/{rating}', [UserReviewController::class, 'update']);
             Route::delete('/delete/{rating}', [UserReviewController::class, 'destroy']);
+        });
+
+
+        Route::prefix('refound')->group(function () {
+            Route::post('/store', [RefoundController::class, 'store'])->middleware('otp');
+            Route::get('/index', [RefoundController::class, 'index'])->middleware('otp');
+
         });
     });
 });
@@ -198,6 +209,21 @@ Route::middleware(['auth:sanctum', 'admin', 'throttle:api'])->group(function () 
         Route::prefix('review')->group(function () {
             Route::get('/get_all', [UserReviewController::class, 'getAllRatings']);
             Route::delete('/delete/{id}', [UserReviewController::class, 'adminDestroy']);
+        });
+
+
+        Route::prefix('refound')->group(function () {
+            Route::get('/index', [RefoundController::class, 'index_admin'])->middleware('otp');
+            Route::put('/update_status/{id}', [RefoundController::class, 'updateStatus']);
+
+        });
+
+        Route::prefix('coupon')->group(function () {
+            Route::get('/index', [CouponController::class, 'index'])->middleware('otp');
+            Route::post('/store', [CouponController::class, 'store']);
+            Route::put('/update/{id}', [CouponController::class, 'update']);
+            Route::delete('/delete/{id}', [CouponController::class, 'destroy']);
+
         });
     });
 });

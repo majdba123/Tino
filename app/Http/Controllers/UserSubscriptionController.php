@@ -56,6 +56,49 @@ class UserSubscriptionController extends Controller
 
 
 
+    public function stopedsubscribe($id): JsonResponse
+    {
+        try {
+            $user=Auth::user()->id;
+            // Find the user subscription
+            $subscription = User_Subscription::where('id',$id)->where('user_id' ,$user )->first();
+
+            // Check if subscription exists
+            if (!$subscription) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Subscription not found'
+                ], 404);
+            }
+
+            // Update the stop_at field with current timestamp
+            $subscription->update([
+                'stop_at' => now(),
+                'is_active' => false
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Subscription stopped successfully',
+                'data' => $subscription
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to stop subscription',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+
+
+
+
+
+
 
 
 

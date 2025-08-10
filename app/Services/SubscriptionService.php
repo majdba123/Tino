@@ -60,7 +60,7 @@ class SubscriptionService
             }
         }
 
-        return $query->get();
+        return $query; // أزلنا get() هنا
     }
 
     protected function getFilterableFields(): array

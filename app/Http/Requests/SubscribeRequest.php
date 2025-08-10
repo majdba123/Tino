@@ -21,7 +21,7 @@ class SubscribeRequest extends FormRequest
                 Rule::exists('subscriptions', 'id')->where('is_active', true)
             ],
             'discount_code' => 'nullable|string|exists:discount_coupons,code',
-            'pet_id' => 'required|string|exists:pets,id'
+            'pet_id' => 'required|exists:pets,id'
 
 
         ];
@@ -32,7 +32,9 @@ class SubscribeRequest extends FormRequest
         return [
             'subscription_id.required' => 'يجب اختيار اشتراك',
             'subscription_id.exists' => 'الاشتراك المحدد غير متوفر',
-           'discount_code.exists' => 'كود الخصم غير صحيح'
+           'discount_code.exists' => 'كود الخصم غير صحيح',
+           'pet_id.exists' => ' الحيوان   غير صحيح'
+
         ];
     }
 }
