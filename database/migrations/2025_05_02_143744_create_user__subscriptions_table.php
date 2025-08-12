@@ -28,6 +28,8 @@ return new class extends Migration
             $table->string('payment_session_id')->nullable(); // نوع الحيوان (كلب، قطة، إلخ)
 
 
+
+
             $table->timestamps();
         });
     }

@@ -21,6 +21,8 @@ return new class extends Migration
             $table->string('otp')->default(0); // OTP for phone verification
             $table->string('type')->default(0); // OTP for phone verification
             $table->string('image')->nullable();
+            $table->string('payment_methods')->nullable();
+
             $table->string('password'); // Password (hashed)
             $table->timestamp('email_verified_at')->nullable(); // Email verification
             $table->string('status')->default('active'); // OTP for phone verification

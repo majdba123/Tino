@@ -28,7 +28,7 @@ class User_Subscription extends Model
         'price_paid',
         'is_active',
         'stop_at',
-
+        'auto_renew',
         'payment_method',
         'payment_status',
         'payment_session_id'

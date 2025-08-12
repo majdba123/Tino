@@ -24,11 +24,14 @@ class User extends Authenticatable implements MustVerifyEmail
         'phone',
         'image',
         'email',
+        'payment_methods',
         'otp',
         'status',
         'type',
         'password',
-        'email_verified_at'
+        'email_verified_at',
+        'stripe_customer_id',
+        'stripe_payment_method_id'
 
     ];
 

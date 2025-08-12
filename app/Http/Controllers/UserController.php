@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class UserController extends Controller
 {
@@ -33,6 +34,7 @@ class UserController extends Controller
                     'name' => $user->name,
                     'email' => $user->email,
                     'phone' => $user->phone,
+                    'payment_methods' => $user->payment_methods,
                     'type' => $user->type,
                     'location' => [
                         'lat' => $user->lat,
@@ -77,7 +79,9 @@ class UserController extends Controller
                 'lat' => 'sometimes|numeric',
                 'lang' => 'sometimes|numeric',
                 'password' => 'sometimes|string|min:8|confirmed',
-                'image' => 'sometimes|image|mimes:jpeg,png,jpg,gif|max:2048'
+                'image' => 'sometimes|image|mimes:jpeg,png,jpg,gif|max:2048',
+                'payment_methods' =>  'sometimes|in:stripe,paypal'
+
             ]);
 
             if ($validator->fails()) {
@@ -87,7 +91,7 @@ class UserController extends Controller
                 ], 422);
             }
 
-            $data = $request->only(['name', 'email', 'phone', 'lat', 'lang']);
+            $data = $request->only(['name', 'email', 'phone', 'lat', 'lang','payment_methods']);
 
             if ($request->has('password')) {
                 $data['password'] = bcrypt($request->password);
@@ -121,6 +125,7 @@ class UserController extends Controller
                     'name' => $user->name,
                     'email' => $user->email,
                     'phone' => $user->phone,
+                    'payment_methods' => $user->payment_methods,
                     'location' => [
                         'lat' => $user->lat,
                         'lang' => $user->lang

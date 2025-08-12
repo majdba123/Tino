@@ -11,8 +11,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('user__subscriptions', function (Blueprint $table) {
-            $table->foreignId('pet_id')->nullable()->constrained()->cascadeOnDelete();
+        Schema::table('users', function (Blueprint $table) {
+            $table->string('stripe_customer_id')->nullable();
+            $table->string('stripe_payment_method_id')->nullable();
         });
     }
 
@@ -21,7 +22,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('user__subscriptions', function (Blueprint $table) {
+        Schema::table('users', function (Blueprint $table) {
             //
         });
     }

@@ -24,20 +24,28 @@ class UserSubscriptionController extends Controller
 
 
 
-
     public function subscribe(SubscribeRequest $request): JsonResponse
     {
         $validated = $request->validated();
+        $user = Auth::user();
+
+        // ✅ تحقق من وجود طريقة دفع
+        if (is_null($user->payment_methods)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'يجب أن تختار طريقة دفع قبل الاشتراك.',
+            ], 400);
+        }
 
         $subscription = $this->subscriptionService->subscribeUser(
             $request->user(),
             $request->subscription_id,
             $request->discount_code,
-            $request->payment_method ?? 'stripe', // القيمة الافتراضية stripe
+            $user->payment_methods,
             $request->pet_id,
-
         );
-                // توليد كوبون الخصم
+
+        // 🎁 توليد كوبون الخصم
         $coupon = DiscountCoupon::create([
             'code' => 'PET25-' . Str::upper(Str::random(6)),
             'discount_percent' => 25,
@@ -45,12 +53,14 @@ class UserSubscriptionController extends Controller
             'user_id' => auth()->id(),
             'is_used' => false
         ]);
+
         return response()->json([
             'success' => $subscription['success'],
             'payment_url' => $subscription['payment_url'] ?? null,
             'message' => $subscription['message'],
         ], $subscription['success'] ? 201 : 400);
     }
+
 
 
 

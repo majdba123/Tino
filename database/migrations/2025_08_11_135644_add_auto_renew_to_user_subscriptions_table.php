@@ -12,7 +12,8 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('user__subscriptions', function (Blueprint $table) {
-            $table->foreignId('pet_id')->nullable()->constrained()->cascadeOnDelete();
+         $table->boolean('auto_renew')->default(false);
+
         });
     }
 

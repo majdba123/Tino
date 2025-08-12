@@ -29,7 +29,7 @@ class PaymentController extends Controller
         $this->paypalContext->setConfig(['mode' => env('PAYPAL_MODE', 'sandbox')]);
     }*/
 
-    public function success($subscriptionId)
+   /* public function success($subscriptionId)
     {
         try {
             $subscription = User_Subscription::with('subscription')->findOrFail($subscriptionId);
@@ -94,7 +94,160 @@ class PaymentController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }*/
+    public function success($subscriptionId)
+    {
+        try {
+            $subscription = User_Subscription::with('subscription', 'user')->findOrFail($subscriptionId);
+            $user = $subscription->user;
+
+            // إذا كان الاشتراك مفعلاً مسبقاً
+            if ($subscription->is_active === User_Subscription::STATUS_ACTIVE) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'الاشتراك مفعّل مسبقاً'
+                ]);
+            }
+
+            // Stripe
+            if ($subscription->payment_method === 'stripe') {
+                $stripe = new \Stripe\StripeClient(env('STRIPE_SECRET'));
+                $session = $stripe->checkout->sessions->retrieve($subscription->payment_session_id);
+
+                if ($session->payment_status === 'paid') {
+                    // تفعيل الاشتراك
+                    $subscription->update([
+                        'is_active' => User_Subscription::STATUS_ACTIVE,
+                        'payment_status' => 'paid',
+                        'start_date' => now(),
+                        'end_date' => now()->addMonths($subscription->subscription->duration_months)
+                    ]);
+
+                    // حفظ وربط وسيلة الدفع للمستخدم
+                    if (isset($session->payment_intent)) {
+                        $intent = $stripe->paymentIntents->retrieve($session->payment_intent);
+
+                        if (isset($intent->payment_method)) {
+                            $paymentMethodId = $intent->payment_method;
+
+                            try {
+                                $paymentMethod = $stripe->paymentMethods->retrieve($paymentMethodId);
+
+                                // إذا لم تكن مرتبطة بـ Customer، قم بربطها
+                                if ($paymentMethod->customer !== $user->stripe_customer_id) {
+                                    $stripe->paymentMethods->attach($paymentMethodId, [
+                                        'customer' => $user->stripe_customer_id
+                                    ]);
+                                }
+
+                                // حفظ طريقة الدفع للمستخدم وتفعيل التجديد التلقائي
+                                $user->update([
+                                    'stripe_payment_method_id' => $paymentMethodId
+                                ]);
+
+                                // الاحتفاظ بقيمة auto_renew الأصلية أو تعيينها إذا لم تكن موجودة
+                                $subscription->update([
+                                    'auto_renew' => $subscription->auto_renew ?? request()->boolean('auto_renew', false)
+                                ]);
+
+                                // تسجيل الدفع الناجح
+                                Payment::where('user_subscription_id', $subscription->id)
+                                    ->update([
+                                        'status' => 'paid',
+                                        'details' => array_merge(
+                                            $session->toArray(),
+                                            ['payment_method_id' => $paymentMethodId]
+                                        )
+                                    ]);
+
+                            } catch (\Exception $e) {
+                                Log::error("فشل في حفظ طريقة الدفع للمستخدم {$user->id}: " . $e->getMessage());
+                            }
+                        }
+                    }
+
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'تم تفعيل الاشتراك بنجاح عبر Stripe',
+                        'data' => [
+                            'subscription' => $subscription,
+                            'auto_renew' => $subscription->auto_renew
+                        ]
+                    ]);
+                }
+            }
+
+            // PayPal
+            elseif ($subscription->payment_method === 'paypal') {
+                if (request('paymentId') && request('PayerID')) {
+                    $payment = \PayPal\Api\Payment::get(request('paymentId'), $this->paypalContext);
+                    $execution = new \PayPal\Api\PaymentExecution();
+                    $execution->setPayerId(request('PayerID'));
+
+                    $result = $payment->execute($execution, $this->paypalContext);
+
+                    if ($result->getState() === 'approved') {
+                        $subscription->update([
+                            'is_active' => User_Subscription::STATUS_ACTIVE,
+                            'payment_status' => 'paid',
+                            'start_date' => now(),
+                            'end_date' => now()->addMonths($subscription->subscription->duration_months),
+                            'auto_renew' => false // PayPal لا يدعم التجديد التلقائي
+                        ]);
+
+                        Payment::where('user_subscription_id', $subscription->id)
+                            ->update([
+                                'status' => 'paid',
+                                'details' => $result->toArray()
+                            ]);
+
+                        return response()->json([
+                            'success' => true,
+                            'message' => 'تم تفعيل الاشتراك بنجاح عبر PayPal',
+                            'data' => [
+                                'subscription' => $subscription,
+                                'auto_renew' => false
+                            ]
+                        ]);
+                    }
+                }
+            }
+
+            // فشل الدفع
+            Payment::where('user_subscription_id', $subscription->id)
+                ->update(['status' => 'failed']);
+
+            $subscription->update([
+                'payment_status' => 'failed',
+                'auto_renew' => false
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'لم يتم تأكيد الدفع بعد',
+                'data' => ['status' => 'processing']
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('خطأ في معالجة الدفع: ' . $e->getMessage());
+
+            Payment::where('user_subscription_id', $subscriptionId)
+                ->update(['status' => 'failed']);
+
+            User_Subscription::where('id', $subscriptionId)
+                ->update([
+                    'payment_status' => 'failed',
+                    'auto_renew' => false
+                ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء معالجة الدفع',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
+
 
     public function cancel($subscriptionId)
     {
