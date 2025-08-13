@@ -508,18 +508,31 @@ public function subscribeUser($user, $subscriptionId, $discountCode = null, $pay
                 'payment_method' => $paymentMethod,
                 'payment_status' => 'pending',
                 'pet_id' => $pet_id,
-                'auto_renew' => $autoRenew
+                'auto_renew' => $autoRenew,
+                'stripe_customer_id' => null,
+                'stripe_payment_method_id' => null,
             ]);
 
             if ($paymentMethod == 'stripe') {
                 $stripe = new \Stripe\StripeClient(env('STRIPE_SECRET'));
 
-                if (!$user->stripe_customer_id) {
+                // تحقق إذا كان العميل موجوداً بالفعل في Stripe
+                $customer = $stripe->customers->search([
+                    'query' => "email:'{$user->email}'",
+                    'limit' => 1
+                ]);
+
+                if (count($customer->data) > 0) {
+                    $customer = $customer->data[0];
+                } else {
                     $customer = $stripe->customers->create([
                         'email' => $user->email,
                         'name' => $user->name,
+                        'metadata' => [
+                            'user_id' => $user->id,
+                            'app_name' => config('app.name')
+                        ]
                     ]);
-                    $user->update(['stripe_customer_id' => $customer->id]);
                 }
 
                 $session = $stripe->checkout->sessions->create([
@@ -538,12 +551,19 @@ public function subscribeUser($user, $subscriptionId, $discountCode = null, $pay
                     'mode' => 'payment',
                     'success_url' => url("/api/payment/success/{$userSubscription->id}"),
                     'cancel_url' => url("/api/payment/cancel/{$userSubscription->id}"),
-                    'customer' => $user->stripe_customer_id,
+                    'customer' => $customer->id,
                     'metadata' => [
                         'user_id' => $user->id,
                         'subscription_id' => $subscription->id,
                         'user_subscription_id' => $userSubscription->id,
-                        'auto_renew' => $autoRenew
+                        'auto_renew' => $autoRenew,
+                        'pet_id' => $pet_id
+                    ],
+                    'payment_intent_data' => [
+                        'setup_future_usage' => $autoRenew ? 'off_session' : 'on_session',
+                        'metadata' => [
+                            'user_subscription_id' => $userSubscription->id
+                        ]
                     ]
                 ]);
 
@@ -552,38 +572,45 @@ public function subscribeUser($user, $subscriptionId, $discountCode = null, $pay
                 $paymentDetails = [
                     'session_id' => $session->id,
                     'payment_intent' => $session->payment_intent,
-                    'payment_status' => $session->payment_status
+                    'payment_status' => $session->payment_status,
+                    'customer_id' => $customer->id
                 ];
-            } elseif ($paymentMethod === 'paypal') {
-                // ... (كود PayPal الحالي يبقى كما هو)
-            }
 
-            $userSubscription->update([
-                'payment_session_id' => $paymentSessionId,
-                'payment_details' => $paymentDetails
-            ]);
+                // Update subscription with Stripe customer ID
+                $userSubscription->update([
+                    'stripe_customer_id' => $customer->id,
+                    'payment_session_id' => $paymentSessionId,
+                    'payment_details' => $paymentDetails
+                ]);
+            } elseif ($paymentMethod === 'paypal') {
+                // ... (PayPal code remains unchanged)
+            }
 
             Payment::create([
                 'user_id' => $user->id,
                 'user_subscription_id' => $userSubscription->id,
-                'payment_id' => $paymentSessionId,
+                'payment_id' => $paymentSessionId ?? null,
                 'amount' => $finalPrice,
                 'currency' => 'usd',
                 'payment_method' => $paymentMethod,
                 'status' => 'pending',
-                'details' => $paymentDetails
+                'details' => $paymentDetails ?? []
             ]);
 
             return [
                 'success' => true,
-                'payment_url' => $paymentUrl,
+                'payment_url' => $paymentUrl ?? null,
                 'subscription' => $userSubscription,
                 'discount' => $discountApplied,
                 'message' => 'تم إنشاء جلسة الدفع بنجاح'
             ];
         });
     } catch (\Exception $e) {
-        Log::error('Error in subscribeUser: ' . $e->getMessage());
+        Log::error('Error in subscribeUser: ' . $e->getMessage(), [
+            'exception' => $e,
+            'user_id' => $user->id,
+            'subscription_id' => $subscriptionId
+        ]);
         return [
             'success' => false,
             'message' => 'حدث خطأ أثناء إنشاء الاشتراك',
@@ -591,12 +618,6 @@ public function subscribeUser($user, $subscriptionId, $discountCode = null, $pay
         ];
     }
 }
-
-
-
-
-
-
 
 
 

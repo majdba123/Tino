@@ -1,9 +1,9 @@
 <?php
-
 namespace App\Console\Commands;
 
 use App\Models\User_Subscription;
 use App\Models\Payment;
+use App\Models\Subscription;
 use Illuminate\Console\Command;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -42,26 +42,35 @@ class CheckExpiredSubscribes extends Command
                 Log::info("تم تعطيل الاشتراك: {$subscription->id}");
 
                 // التحقق من إمكانية التجديد التلقائي
-                if ($this->canAutoRenew($subscription, $user)) {
+                if ($this->canAutoRenew($subscription)) {
                     $this->renewSubscription($stripe, $subscription, $user, $now);
                 }
             } catch (\Exception $e) {
-                Log::error("خطأ أثناء معالجة الاشتراك {$subscription->id}: " . $e->getMessage());
+                Log::error("خطأ أثناء معالجة الاشتراك {$subscription->id}: " . $e->getMessage(), ['exception' => $e]);
             }
         }
 
         Log::info('تم الانتهاء من عملية الفحص');
     }
 
-    protected function canAutoRenew($subscription, $user): bool
+    protected function canAutoRenew($subscription): bool
     {
         if (!$subscription->auto_renew) {
             Log::info("التجديد التلقائي غير مفعل للاشتراك: {$subscription->id}");
             return false;
         }
 
-        if (!$user->stripe_customer_id || !$user->stripe_payment_method_id) {
-            Log::warning("بيانات Stripe ناقصة للمستخدم: {$user->id}");
+        if (!$subscription->stripe_customer_id || !$subscription->stripe_payment_method_id) {
+            Log::warning("بيانات Stripe ناقصة للاشتراك: {$subscription->id}", [
+                'stripe_customer_id' => $subscription->stripe_customer_id,
+                'stripe_payment_method_id' => $subscription->stripe_payment_method_id
+            ]);
+            return false;
+        }
+
+        // التحقق من أن الباقة لا تزال متاحة
+        if (!$subscription->subscription || !$subscription->subscription->is_active) {
+            Log::warning("الباقة غير متاحة للاشتراك: {$subscription->id}");
             return false;
         }
 
@@ -71,63 +80,79 @@ class CheckExpiredSubscribes extends Command
     protected function renewSubscription($stripe, $subscription, $user, $now)
     {
         try {
-            Log::info("محاولة تجديد الاشتراك للمستخدم: {$user->id}");
+            Log::info("محاولة تجديد الاشتراك للمستخدم: {$user->id}, الاشتراك: {$subscription->id}");
 
-            // التحقق من طريقة الدفع
-            $paymentMethod = $stripe->paymentMethods->retrieve($user->stripe_payment_method_id);
-
-            // إنشاء عملية دفع جديدة
-            $intent = $stripe->paymentIntents->create([
+            // إنشاء عملية دفع جديدة باستخدام PaymentMethod الموجود
+            $paymentIntent = $stripe->paymentIntents->create([
                 'amount' => (int)($subscription->price_paid * 100),
                 'currency' => 'usd',
-                'customer' => $user->stripe_customer_id,
-                'payment_method' => $user->stripe_payment_method_id,
+                'customer' => $subscription->stripe_customer_id,
+                'payment_method' => $subscription->stripe_payment_method_id,
                 'off_session' => true,
                 'confirm' => true,
                 'description' => 'تجديد تلقائي للاشتراك',
                 'metadata' => [
                     'user_id' => $user->id,
                     'subscription_id' => $subscription->subscription_id,
-                    'previous_subscription_id' => $subscription->id
+                    'previous_subscription_id' => $subscription->id,
+                    'pet_id' => $subscription->pet_id
                 ]
             ]);
 
-            // إنشاء اشتراك جديد
+            // التحقق من نجاح الدفع
+            if ($paymentIntent->status !== 'succeeded') {
+                throw new \Exception("حالة الدفع غير ناجحة: {$paymentIntent->status}");
+            }
+
+            // الحصول على عدد الزيارات والمكالمات المسموح بها من الباقة
+            $subscriptionPlan = $subscription->subscription;
+            $remainingCalls = $subscriptionPlan->calls_limit ?? 0;
+            $remainingVisits = $subscriptionPlan->visits_limit ?? 0;
+
+            // إنشاء اشتراك جديد بنفس بيانات الاشتراك القديم
             $newSubscription = User_Subscription::create([
                 'user_id' => $user->id,
                 'subscription_id' => $subscription->subscription_id,
                 'price_paid' => $subscription->price_paid,
                 'start_date' => $now,
-                'end_date' => $now->copy()->addMonths($subscription->subscription->duration_months),
+                'end_date' => $now->copy()->addMonths($subscriptionPlan->duration_months),
+                'remaining_calls' => $remainingCalls,
+                'remaining_visits' => $remainingVisits,
                 'is_active' => User_Subscription::STATUS_ACTIVE,
                 'payment_method' => 'stripe',
                 'payment_status' => 'paid',
-                'payment_session_id' => $intent->id,
-                'payment_details' => $intent->toArray(),
+                'payment_session_id' => $paymentIntent->id,
+                'payment_details' => $paymentIntent->toArray(),
                 'pet_id' => $subscription->pet_id,
-                'auto_renew' => true
+                'auto_renew' => true,
+                'stripe_customer_id' => $subscription->stripe_customer_id,
+                'stripe_payment_method_id' => $subscription->stripe_payment_method_id
             ]);
 
             // تسجيل الدفع
             Payment::create([
                 'user_id' => $user->id,
                 'user_subscription_id' => $newSubscription->id,
-                'payment_id' => $intent->id,
+                'payment_id' => $paymentIntent->id,
                 'amount' => $subscription->price_paid,
                 'currency' => 'usd',
                 'payment_method' => 'stripe',
                 'status' => 'paid',
-                'details' => $intent->toArray()
+                'details' => $paymentIntent->toArray()
             ]);
 
             Log::info("تم التجديد بنجاح - اشتراك جديد: {$newSubscription->id}");
 
+            // إرسال إشعار للمستخدم
+
         } catch (\Stripe\Exception\CardException $e) {
-            Log::error("فشل في الدفع: " . $e->getMessage());
+            Log::error("فشل في الدفع للاشتراك {$subscription->id}: " . $e->getMessage(), ['exception' => $e]);
             $subscription->update(['auto_renew' => false]);
         } catch (\Exception $e) {
-            Log::error("خطأ غير متوقع: " . $e->getMessage());
+            Log::error("خطأ غير متوقع أثناء تجديد الاشتراك {$subscription->id}: " . $e->getMessage(), ['exception' => $e]);
             $subscription->update(['auto_renew' => false]);
         }
     }
+
+
 }

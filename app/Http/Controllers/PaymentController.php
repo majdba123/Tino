@@ -95,14 +95,26 @@ class PaymentController extends Controller
             ], 500);
         }
     }*/
+
+
+
+
+
     public function success($subscriptionId)
     {
         try {
             $subscription = User_Subscription::with('subscription', 'user')->findOrFail($subscriptionId);
             $user = $subscription->user;
 
+            Log::info("Processing success for subscription {$subscriptionId}", [
+                'user_id' => $user->id,
+                'payment_method' => $subscription->payment_method,
+                'payment_session_id' => $subscription->payment_session_id
+            ]);
+
             // إذا كان الاشتراك مفعلاً مسبقاً
             if ($subscription->is_active === User_Subscription::STATUS_ACTIVE) {
+                Log::info("الاشتراك {$subscriptionId} مفعل مسبقاً");
                 return response()->json([
                     'success' => true,
                     'message' => 'الاشتراك مفعّل مسبقاً'
@@ -112,69 +124,176 @@ class PaymentController extends Controller
             // Stripe
             if ($subscription->payment_method === 'stripe') {
                 $stripe = new \Stripe\StripeClient(env('STRIPE_SECRET'));
-                $session = $stripe->checkout->sessions->retrieve($subscription->payment_session_id);
 
-                if ($session->payment_status === 'paid') {
-                    // تفعيل الاشتراك
+                // Verify payment_session_id exists
+                if (empty($subscription->payment_session_id)) {
+                    Log::error("No payment_session_id found for subscription {$subscriptionId}");
+                    Payment::where('user_subscription_id', $subscription->id)
+                        ->update(['status' => 'failed']);
                     $subscription->update([
-                        'is_active' => User_Subscription::STATUS_ACTIVE,
-                        'payment_status' => 'paid',
-                        'start_date' => now(),
-                        'end_date' => now()->addMonths($subscription->subscription->duration_months)
+                        'payment_status' => 'failed',
+                        'auto_renew' => false
                     ]);
-
-                    // حفظ وربط وسيلة الدفع للمستخدم
-                    if (isset($session->payment_intent)) {
-                        $intent = $stripe->paymentIntents->retrieve($session->payment_intent);
-
-                        if (isset($intent->payment_method)) {
-                            $paymentMethodId = $intent->payment_method;
-
-                            try {
-                                $paymentMethod = $stripe->paymentMethods->retrieve($paymentMethodId);
-
-                                // إذا لم تكن مرتبطة بـ Customer، قم بربطها
-                                if ($paymentMethod->customer !== $user->stripe_customer_id) {
-                                    $stripe->paymentMethods->attach($paymentMethodId, [
-                                        'customer' => $user->stripe_customer_id
-                                    ]);
-                                }
-
-                                // حفظ طريقة الدفع للمستخدم وتفعيل التجديد التلقائي
-                                $user->update([
-                                    'stripe_payment_method_id' => $paymentMethodId
-                                ]);
-
-                                // الاحتفاظ بقيمة auto_renew الأصلية أو تعيينها إذا لم تكن موجودة
-                                $subscription->update([
-                                    'auto_renew' => $subscription->auto_renew ?? request()->boolean('auto_renew', false)
-                                ]);
-
-                                // تسجيل الدفع الناجح
-                                Payment::where('user_subscription_id', $subscription->id)
-                                    ->update([
-                                        'status' => 'paid',
-                                        'details' => array_merge(
-                                            $session->toArray(),
-                                            ['payment_method_id' => $paymentMethodId]
-                                        )
-                                    ]);
-
-                            } catch (\Exception $e) {
-                                Log::error("فشل في حفظ طريقة الدفع للمستخدم {$user->id}: " . $e->getMessage());
-                            }
-                        }
-                    }
-
                     return response()->json([
-                        'success' => true,
-                        'message' => 'تم تفعيل الاشتراك بنجاح عبر Stripe',
-                        'data' => [
-                            'subscription' => $subscription,
-                            'auto_renew' => $subscription->auto_renew
-                        ]
+                        'success' => false,
+                        'message' => 'معرف جلسة الدفع غير موجود',
+                        'data' => ['status' => 'missing_session_id']
                     ]);
                 }
+
+                // Retrieve the checkout session
+                try {
+                    $session = $stripe->checkout->sessions->retrieve(
+                        $subscription->payment_session_id,
+                        ['expand' => ['payment_intent', 'setup_intent']]
+                    );
+                } catch (\Exception $e) {
+                    Log::error("Failed to retrieve checkout session for subscription {$subscriptionId}: " . $e->getMessage(), ['exception' => $e]);
+                    Payment::where('user_subscription_id', $subscription->id)
+                        ->update(['status' => 'failed']);
+                    $subscription->update([
+                        'payment_status' => 'failed',
+                        'auto_renew' => false
+                    ]);
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'فشل في استرجاع جلسة الدفع',
+                        'error' => $e->getMessage()
+                    ], 500);
+                }
+
+                // Log session details
+                Log::info("Checkout session details for subscription {$subscriptionId}", [
+                    'payment_status' => $session->payment_status,
+                    'payment_intent' => $session->payment_intent ?? 'null',
+                    'setup_intent' => $session->setup_intent ?? 'null'
+                ]);
+
+                // Check payment status
+                if ($session->payment_status !== 'paid') {
+                    Log::warning("حالة الدفع للاشتراك {$subscriptionId} ليست 'paid': {$session->payment_status}");
+                    Payment::where('user_subscription_id', $subscription->id)
+                        ->update(['status' => 'failed']);
+                    $subscription->update([
+                        'payment_status' => 'failed',
+                        'auto_renew' => false
+                    ]);
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'لم يتم تأكيد الدفع بعد',
+                        'data' => ['status' => $session->payment_status]
+                    ]);
+                }
+
+                // Retrieve payment method from different sources
+                $paymentMethodId = null;
+
+                // 1. Try to get from payment intent
+                if (!empty($session->payment_intent)) {
+                    try {
+                        $paymentIntent = $session->payment_intent;
+                        Log::info("Payment intent details for subscription {$subscriptionId}", [
+                            'payment_intent_id' => $paymentIntent->id,
+                            'payment_method' => $paymentIntent->payment_method ?? 'null'
+                        ]);
+
+                        if (!empty($paymentIntent->payment_method)) {
+                            $paymentMethodId = $paymentIntent->payment_method;
+                        }
+                    } catch (\Exception $e) {
+                        Log::error("Failed to process payment intent for subscription {$subscriptionId}: " . $e->getMessage());
+                    }
+                }
+
+                // 2. Try to get from setup intent (for subscriptions)
+                if (empty($paymentMethodId) && !empty($session->setup_intent)) {
+                    try {
+                        $setupIntent = $session->setup_intent;
+                        Log::info("Setup intent details for subscription {$subscriptionId}", [
+                            'setup_intent_id' => $setupIntent->id,
+                            'payment_method' => $setupIntent->payment_method ?? 'null'
+                        ]);
+
+                        if (!empty($setupIntent->payment_method)) {
+                            $paymentMethodId = $setupIntent->payment_method;
+                        }
+                    } catch (\Exception $e) {
+                        Log::error("Failed to process setup intent for subscription {$subscriptionId}: " . $e->getMessage());
+                    }
+                }
+
+                // 3. Fallback to payment method types from session
+                if (empty($paymentMethodId) && !empty($session->payment_method_types)) {
+                    $paymentMethodId = $session->payment_method_types[0] ?? null;
+                    Log::info("Using fallback payment method type for subscription {$subscriptionId}", [
+                        'payment_method_type' => $paymentMethodId
+                    ]);
+                }
+
+                // تفعيل الاشتراك
+                $subscription->update([
+                    'is_active' => User_Subscription::STATUS_ACTIVE,
+                    'payment_status' => 'paid',
+                    'start_date' => now(),
+                    'end_date' => now()->addMonths($subscription->subscription->duration_months),
+                    'stripe_payment_method_id' => $paymentMethodId,
+                    'auto_renew' => $subscription->auto_renew ?? request()->boolean('auto_renew', false)
+                ]);
+
+                // حفظ وربط وسيلة الدفع للاشتراك إذا وجدت
+                if ($paymentMethodId) {
+                    try {
+                        $paymentMethod = $stripe->paymentMethods->retrieve($paymentMethodId);
+                        Log::info("Payment method retrieved for subscription {$subscriptionId}", [
+                            'payment_method_id' => $paymentMethodId,
+                            'customer' => $paymentMethod->customer ?? 'null'
+                        ]);
+
+                        // إذا لم تكن مرتبطة بـ Customer، قم بربطها
+                        if ($paymentMethod->customer !== $subscription->stripe_customer_id) {
+                            $stripe->paymentMethods->attach($paymentMethodId, [
+                                'customer' => $subscription->stripe_customer_id
+                            ]);
+                            Log::info("Attached payment method {$paymentMethodId} to customer {$subscription->stripe_customer_id}");
+                        }
+
+                        // تسجيل الدفع الناجح
+                        Payment::where('user_subscription_id', $subscription->id)
+                            ->update([
+                                'status' => 'paid',
+                                'details' => array_merge(
+                                    $session->toArray(),
+                                    ['payment_method_id' => $paymentMethodId]
+                                )
+                            ]);
+
+                        Log::info("Successfully updated subscription {$subscriptionId} with stripe_payment_method_id and payment status");
+                    } catch (\Exception $e) {
+                        Log::error("فشل في حفظ طريقة الدفع للاشتراك {$subscription->id}: " . $e->getMessage(), ['exception' => $e]);
+                    }
+                } else {
+                    Log::warning("لم يتم العثور على طريقة دفع للاشتراك {$subscription->id}", [
+                        'payment_intent' => $session->payment_intent ?? 'غير موجود',
+                        'setup_intent' => $session->setup_intent ?? 'غير موجود',
+                        'payment_method_types' => $session->payment_method_types ?? []
+                    ]);
+
+                    // مع ذلك، قم بتسجيل الدفع الناجح بدون payment_method_id
+                    Payment::where('user_subscription_id', $subscription->id)
+                        ->update([
+                            'status' => 'paid',
+                            'details' => $session->toArray()
+                        ]);
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'تم تفعيل الاشتراك بنجاح عبر Stripe',
+                    'data' => [
+                        'subscription' => $subscription,
+                        'auto_renew' => $subscription->auto_renew
+                    ]
+                ]);
             }
 
             // PayPal
@@ -201,6 +320,7 @@ class PaymentController extends Controller
                                 'details' => $result->toArray()
                             ]);
 
+                        Log::info("Successfully processed PayPal payment for subscription {$subscriptionId}");
                         return response()->json([
                             'success' => true,
                             'message' => 'تم تفعيل الاشتراك بنجاح عبر PayPal',
@@ -214,6 +334,7 @@ class PaymentController extends Controller
             }
 
             // فشل الدفع
+            Log::warning("فشل الدفع للاشتراك {$subscription->id}: طريقة الدفع غير مدعومة أو بيانات غير كاملة");
             Payment::where('user_subscription_id', $subscription->id)
                 ->update(['status' => 'failed']);
 
@@ -229,7 +350,10 @@ class PaymentController extends Controller
             ]);
 
         } catch (\Exception $e) {
-            Log::error('خطأ في معالجة الدفع: ' . $e->getMessage());
+            Log::error('خطأ في معالجة الدفع: ' . $e->getMessage(), [
+                'subscription_id' => $subscriptionId,
+                'exception' => $e
+            ]);
 
             Payment::where('user_subscription_id', $subscriptionId)
                 ->update(['status' => 'failed']);
@@ -247,7 +371,6 @@ class PaymentController extends Controller
             ], 500);
         }
     }
-
 
     public function cancel($subscriptionId)
     {

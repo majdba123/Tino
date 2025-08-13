@@ -31,7 +31,9 @@ class User_Subscription extends Model
         'auto_renew',
         'payment_method',
         'payment_status',
-        'payment_session_id'
+        'payment_session_id',
+        'stripe_customer_id',
+        'stripe_payment_method_id'
     ];
 
     protected $casts = [
