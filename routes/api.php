@@ -136,6 +136,11 @@ Route::middleware(['auth:sanctum', 'banned', 'throttle:api'])->group(function ()
             Route::get('/index', [RefoundController::class, 'index'])->middleware('otp');
 
         });
+
+        Route::prefix('payment')->group(function () {
+            Route::post('/index', [PaymentController::class, 'index'])->middleware('otp');
+
+        });
     });
 });
 
@@ -225,6 +230,11 @@ Route::middleware(['auth:sanctum', 'admin', 'throttle:api'])->group(function () 
             Route::delete('/delete/{id}', [CouponController::class, 'destroy']);
 
         });
+
+        Route::prefix('payment')->group(function () {
+            Route::post('/index', [PaymentController::class, 'adminIndex'])->middleware('otp');
+
+        });
     });
 });
 
@@ -265,6 +275,17 @@ Route::middleware(['auth:sanctum', 'employee', 'bannd', 'throttle:api'])->group(
             Route::get('/show/{id}', [ConsultationController::class, 'show']);
             Route::post('/change_operation/{id}', [ConsultationController::class, 'change_operation']);
             Route::post('/reassignToClinic/{id}', [ConsultationController::class, 'reassignToClinic']);
+        });
+
+        Route::prefix('payment')->group(function () {
+            Route::post('/index', [PaymentController::class, 'adminIndex'])->middleware('otp');
+
+        });
+
+        Route::prefix('contact')->group(function () {
+            Route::post('/store_reply/{contact_id}', [ContactController::class, 'storeReply']);
+            Route::get('/get_all', [ContactController::class, 'allContacts']);
+            Route::delete('delete/{contact_id}', [ContactController::class, 'destroy']);
         });
     });
 });

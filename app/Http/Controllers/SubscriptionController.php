@@ -123,15 +123,36 @@ class SubscriptionController extends Controller
 
     public function get_all_user_subscriped(Request $request): JsonResponse
     {
-        $perPage = $request->input('per_page', 15); // 15 عنصراً في الصفحة افتراضياً
+        $perPage = $request->input('per_page', 15);
+        $userId = $request->input('user_id');
 
-        $query = User_Subscription::with(['user', 'subscription','payment','pet'])
-            ->where('is_active', true)
+        $query = User_Subscription::with(['user', 'subscription', 'payment', 'pet'])
+            ->when($userId, function ($query) use ($userId) {
+                return $query->where('user_id', $userId);
+            })
+            ->when($request->input('is_active'), function ($query) use ($request) {
+                return $query->where('is_active', filter_var($request->is_active, FILTER_VALIDATE_BOOLEAN));
+            })
+            ->when($request->input('subscription_id'), function ($query) use ($request) {
+                return $query->where('subscription_id', $request->subscription_id);
+            })
+            ->when($request->input('payment_method'), function ($query) use ($request) {
+                return $query->where('payment_method', $request->payment_method);
+            })
+            ->when($request->input('payment_status'), function ($query) use ($request) {
+                return $query->where('payment_status', $request->payment_status);
+            })
+            ->when($request->input('start_date'), function ($query) use ($request) {
+                return $query->whereDate('start_date', '>=', $request->start_date);
+            })
+            ->when($request->input('end_date'), function ($query) use ($request) {
+                return $query->whereDate('end_date', '<=', $request->end_date);
+            })
             ->latest();
 
         $paginatedSubscriptions = $query->paginate($perPage);
 
-        // تنسيق البيانات مع الحفاظ على الهيكل الأصلي
+        // تنسيق البيانات
         $formattedData = $paginatedSubscriptions->getCollection()
             ->groupBy('user_id')
             ->map(function ($subscriptions) {
@@ -150,21 +171,50 @@ class SubscriptionController extends Controller
                             'end_date' => $subscription->end_date,
                             'remaining_calls' => $subscription->remaining_calls,
                             'remaining_visits' => $subscription->remaining_visits,
-                            'is_active' => $subscription->is_active
+                            'is_active' => $subscription->is_active,
+                            'payment_method' => $subscription->payment_method,
+                            'payment_status' => $subscription->payment_status
                         ];
                     })
                 ];
             })
             ->values();
 
+        // حساب الإحصائيات
+        $stats = [
+            'total_active_subscriptions' => User_Subscription::where('is_active', true)->count(),
+            'total_users_with_subscriptions' => User_Subscription::distinct('user_id')->count('user_id'),
+            'subscription_distribution' => User_Subscription::selectRaw('subscription_id, count(*) as count')
+                ->groupBy('subscription_id')
+                ->with('subscription')
+                ->get()
+                ->map(function ($item) {
+                    return [
+                        'subscription_id' => $item->subscription_id,
+                        'subscription_name' => $item->subscription->name ?? 'Unknown',
+                        'count' => $item->count
+                    ];
+                }),
+            'payment_methods_distribution' => User_Subscription::selectRaw('payment_method, count(*) as count')
+                ->groupBy('payment_method')
+                ->get(),
+            'status_distribution' => [
+                'active' => User_Subscription::where('is_active', true)->count(),
+                'expired' => User_Subscription::where('end_date', '<', now())->count(),
+                'pending' => User_Subscription::where('payment_status', User_Subscription::STATUS_PENDING)->count()
+            ]
+        ];
+
         return response()->json([
             'success' => true,
             'data' => $formattedData,
+            'statistics' => $stats,
             'meta' => [
                 'current_page' => $paginatedSubscriptions->currentPage(),
                 'last_page' => $paginatedSubscriptions->lastPage(),
                 'per_page' => $paginatedSubscriptions->perPage(),
                 'total' => $paginatedSubscriptions->total(),
+                'filters' => $request->except('per_page')
             ],
             'message' => 'تم جلب المستخدمين المشتركين بنجاح'
         ]);

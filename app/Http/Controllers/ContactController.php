@@ -8,8 +8,10 @@ use Illuminate\Support\Facades\Auth;
 
 class ContactController extends Controller
 {
-       public function store(Request $request)
+    public function store(Request $request)
     {
+        $user = Auth::user();
+
         $request->validate([
             'subject' => 'required|string|max:255',
         ]);
@@ -18,6 +20,7 @@ class ContactController extends Controller
         // Create the contact
         $contact = Contact::create([
             'subject' => $request->subject,
+            'user_id' => $user->id,
             'status' => 'pending',
         ]);
 
@@ -66,13 +69,15 @@ class ContactController extends Controller
     public function storeReply(Request $request, $contact_id)
     {
         try {
+            $user = Auth::user(); // الحصول على المستخدم الحالي
+
             // التحقق من صحة البيانات
             $validated = $request->validate([
                 'message' => 'required|string|max:1000',
             ]);
 
-            // البحث عن الشكوى مع معالجة الأخطاء
-            $contact = Contact::find($contact_id);
+            // البحث عن الشكوى مع المستخدم المرتبط بها
+            $contact = Contact::with('user')->find($contact_id);
             if (!$contact) {
                 return response()->json([
                     'success' => false,
@@ -81,38 +86,39 @@ class ContactController extends Controller
                 ], 404);
             }
 
-            // التحقق من صلاحيات المستخدم
-            $user = auth()->user();
-            if ($user->type !== 'admin' && $contact->user_id !== $user->id) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'غير مصرح لك بإضافة رد على هذه الشكوى'
-                ], 403);
-            }
-
             // إنشاء الرد
             $reply = $contact->replies()->create([
                 'message' => $validated['message'],
-                'user_id' => $user->id, // حفظ معرف المستخدم الذي أضاف الرد
-                'is_admin_reply' => $user->type === 'admin' // تحديد إذا كان الرد من المسؤول
+                'user_id' => $user->id,
             ]);
 
-            // تحديث حالة الشكوى إلى "تم الرد"
-            $contact->update(['status' => 'replied']);
+            // إنشاء إشعار للمستخدم
+            $notificationMessage = "تم الرد على اتصالك (ID: {$contact->id})";
+            $notification = User_Notification::create([
+                'user_id' => $contact->user_id, // إرسال الإشعار لصاحب الشكوى
+                'message' => $notificationMessage,
+                'is_read' => false,
+                'is_admin' => false,
+            ]);
 
-            // إرسال الإشعارات إذا لزم الأمر
-            if ($user->type === 'admin') {
-                // إرسال إشعار للمستخدم بأن مسؤولاً قد رد على شكواه
-                // يمكنك تنفيذ نظام الإشعارات الخاص بك هنا
-            } else {
-                // إرسال إشعار للمسؤولين بأن المستخدم قد أضاف رداً إضافياً
-            }
+            // بث الحدث للصفحة الأمامية
+            broadcast(new chat1([
+                'user_id' => $contact->user_id,
+                'message' => $notificationMessage,
+                'contact_id' => $contact->id,
+                'notification_id' => $notification->id,
+                'is_admin' => false
+            ]))->toOthers();
+
+            // تحديث حالة الشكوى
+            $contact->update(['status' => 'replied']);
 
             return response()->json([
                 'success' => true,
                 'message' => 'تم إرسال الرد بنجاح',
                 'data' => [
                     'reply' => $reply,
+                    'notification' => $notification,
                     'contact' => [
                         'id' => $contact->id,
                         'status' => 'replied',
@@ -132,7 +138,7 @@ class ContactController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'حدث خطأ ما',
-                'errors' => ['server' => [$e->getMessage()]]
+                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -153,24 +159,8 @@ class ContactController extends Controller
                 $query->select('id', 'name', 'email');
             }])->latest();
 
-            $user = auth()->user();
-
-            // Apply user_id filter if provided
             if ($request->has('user_id')) {
-                // Only allow admin to filter by other users
-                if ($user->type === 'admin') {
-                    $query->where('user_id', $validated['user_id']);
-                } else {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'غير مصرح لك بالوصول إلى جهات اتصال مستخدمين آخرين'
-                    ], 403);
-                }
-            } else {
-                // If no user_id specified, show only current user's contacts unless user is admin
-                if ($user->type !== 'admin') {
-                    $query->where('user_id', $user->id);
-                }
+                $query->where('user_id', $validated['user_id']);
             }
 
             // Apply status filter if provided

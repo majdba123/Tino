@@ -671,4 +671,92 @@ class PaymentController extends Controller
             ]
         ])->header('Content-Type', 'application/json');
     }
+
+
+    public function index(Request $request)
+    {
+        $user = auth()->user();
+
+        $payments = Payment::where('user_id', $user->id)
+            ->when($request->status, function ($query) use ($request) {
+                return $query->where('status', $request->status);
+            })
+            ->when($request->payment_method, function ($query) use ($request) {
+                return $query->where('payment_method', $request->payment_method);
+            })
+            ->when($request->user_subscription_id, function ($query) use ($request) {
+                return $query->where('user_subscription_id', $request->user_subscription_id);
+            })
+            ->when($request->date_from, function ($query) use ($request) {
+                return $query->whereDate('created_at', '>=', $request->date_from);
+            })
+            ->when($request->date_to, function ($query) use ($request) {
+                return $query->whereDate('created_at', '<=', $request->date_to);
+            })
+            ->orderBy('created_at', 'desc')
+            ->paginate(10);
+
+        // إخفاء حقل التفاصيل
+        $payments->getCollection()->transform(function ($payment) {
+            return $payment->makeHidden('details');
+        });
+
+        return response()->json([
+            'success' => true,
+            'data' => $payments->items(),
+            'pagination' => [
+                'current_page' => $payments->currentPage(),
+                'per_page' => $payments->perPage(),
+                'total' => $payments->total(),
+                'last_page' => $payments->lastPage(),
+            ],
+            'filters' => $request->all(),
+
+        ]);
+    }
+
+
+
+    public function adminIndex(Request $request)
+    {
+
+        $payments = Payment::query()
+            ->when($request->user_id, function ($query) use ($request) {
+                return $query->where('user_id', $request->user_id);
+            })
+            ->when($request->status, function ($query) use ($request) {
+                return $query->where('status', $request->status);
+            })
+            ->when($request->payment_method, function ($query) use ($request) {
+                return $query->where('payment_method', $request->payment_method);
+            })
+            ->when($request->user_subscription_id, function ($query) use ($request) {
+                return $query->where('user_subscription_id', $request->user_subscription_id);
+            })
+            ->when($request->date_from, function ($query) use ($request) {
+                return $query->whereDate('created_at', '>=', $request->date_from);
+            })
+            ->when($request->date_to, function ($query) use ($request) {
+                return $query->whereDate('created_at', '<=', $request->date_to);
+            })
+            ->orderBy('created_at', 'desc')
+            ->paginate(10);
+
+        // إخفاء حقل التفاصيل
+        $payments->getCollection()->transform(function ($payment) {
+            return $payment->makeHidden('details');
+        });
+
+        return response()->json([
+            'success' => true,
+            'data' => $payments->items(),
+            'pagination' => [
+                'current_page' => $payments->currentPage(),
+                'per_page' => $payments->perPage(),
+                'total' => $payments->total(),
+                'last_page' => $payments->lastPage(),
+            ],
+            'filters' => $request->all(),
+        ]);
+    }
 }
