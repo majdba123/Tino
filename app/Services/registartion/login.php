@@ -15,28 +15,27 @@ class login
      * @param array $data
      * @return User
      */
-   public function login(array $data)
-{
-    if (isset($data['email']) && !isset($data['phone'])) {
-        $user = User::where('email', $data['email'])->first();
-    } elseif (!isset($data['email']) && isset($data['phone'])) {
-        $user = User::where('phone', $data['phone'])->first();
-    } else {
-        throw new \Exception('يجب أن تحتوي البيانات إما على البريد الإلكتروني أو رقم الهاتف.');
+    public function login(array $data)
+    {
+        if (isset($data['email']) && !isset($data['phone'])) {
+            $user = User::where('email', $data['email'])->first();
+        } elseif (!isset($data['email']) && isset($data['phone'])) {
+            $user = User::where('phone', $data['phone'])->first();
+        } else {
+            throw new \Exception('يجب أن تحتوي البيانات إما على البريد الإلكتروني أو رقم الهاتف.');
+        }
+
+        if (!$user || !Hash::check($data['password'], $user->password)) {
+            // بدلاً من إرجاع JsonResponse، نرمي استثناء
+            throw new \Exception('Invalid Credentials', 401);
+        }
+
+        $token = $user->createToken($user->name . '-AuthToken')->plainTextToken;
+
+        // إرجاع بيانات المستخدم مع التوكن كمصفوفة
+        return [
+            'user' => $user->only(['id', 'name', 'email', 'phone', 'image', 'type']),
+            'access_token' => $token
+        ];
     }
-
-    if (!$user || !Hash::check($data['password'], $user->password)) {
-        return response()->json([
-            'message' => 'Invalid Credentials'
-        ], 401);
-    }
-
-    $token = $user->createToken($user->name . '-AuthToken')->plainTextToken;
-
-    // إرجاع بيانات المستخدم مع التوكن
-    return [
-        'user' => $user->only(['id', 'name', 'email', 'phone', 'image', 'type']),
-        'access_token' => $token
-    ];
-}
 }

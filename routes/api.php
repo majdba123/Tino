@@ -83,9 +83,15 @@ Route::middleware(['throttle:api'])->group(function () {
 
     Route::get('/payment/success/{subscription}', [PaymentController::class, 'success']);
     Route::get('/payment/cancel/{subscription}', [PaymentController::class, 'cancel']);
-});
+    });
 
 // Authenticated user routes with rate limiting
+
+
+
+
+
+
 Route::middleware(['auth:sanctum', 'banned', 'throttle:api'])->group(function () {
     Route::prefix('user')->group(function () {
         Route::prefix('subscriptions')->group(function () {
@@ -134,11 +140,18 @@ Route::middleware(['auth:sanctum', 'banned', 'throttle:api'])->group(function ()
         Route::prefix('refound')->group(function () {
             Route::post('/store', [RefoundController::class, 'store'])->middleware('otp');
             Route::get('/index', [RefoundController::class, 'index'])->middleware('otp');
-
         });
 
         Route::prefix('payment')->group(function () {
             Route::post('/index', [PaymentController::class, 'index'])->middleware('otp');
+
+        });
+
+
+
+        Route::prefix('pill')->group(function () {
+            Route::get('/index', [PillController::class, 'index_user'])->middleware('otp');
+            Route::get('/show/{id}', [PillController::class, 'show_user'])->middleware('otp');
 
         });
     });
@@ -220,7 +233,6 @@ Route::middleware(['auth:sanctum', 'admin', 'throttle:api'])->group(function () 
         Route::prefix('refound')->group(function () {
             Route::get('/index', [RefoundController::class, 'index_admin'])->middleware('otp');
             Route::put('/update_status/{id}', [RefoundController::class, 'updateStatus']);
-
         });
 
         Route::prefix('coupon')->group(function () {
@@ -228,7 +240,6 @@ Route::middleware(['auth:sanctum', 'admin', 'throttle:api'])->group(function () 
             Route::post('/store', [CouponController::class, 'store']);
             Route::put('/update/{id}', [CouponController::class, 'update']);
             Route::delete('/delete/{id}', [CouponController::class, 'destroy']);
-
         });
 
         Route::prefix('payment')->group(function () {

@@ -15,14 +15,32 @@ use Illuminate\Support\Facades\Storage;
 class PetController extends Controller
 {
 
-    public function store(PetRequest $request)
-    {
-
+public function store(PetRequest $request)
+{
+    try {
         $data = $request->validated();
         $data['user_id'] = auth()->id();
 
         // إضافة القيمة الافتراضية للحالة إذا لم يتم إرسالها
         $data['status'] = $data['status'] ?? 'active';
+
+        // معالجة الحقول المصفوفة (تحويلها إلى JSON)
+        $jsonFields = ['allergies', 'previous_surgeries', 'chronic_conditions', 'vaccination_history'];
+
+        foreach ($jsonFields as $field) {
+            if (isset($data[$field]) && is_array($data[$field])) {
+                $data[$field] = json_encode($data[$field]);
+            } else {
+                $data[$field] = null; // أو json_encode([]) إذا كنت تريد مصفوفة فارغة افتراضياً
+            }
+        }
+
+        // تحويل القيم المنطقية
+        if (isset($data['is_spayed'])) {
+            $data['is_spayed'] = filter_var($data['is_spayed'], FILTER_VALIDATE_BOOLEAN);
+        } else {
+            $data['is_spayed'] = false; // قيمة افتراضية
+        }
 
         // حفظ الصورة بنفس الطريقة المستخدمة سابقاً
         if ($request->hasFile('image')) {
@@ -36,15 +54,32 @@ class PetController extends Controller
         // إنشاء الحيوان الأليف
         $pet = Pet::create($data);
 
+        // تحميل العلاقات مع البيانات المحولة
+        $pet->load('user');
 
+        // تحويل الحقول JSON back إلى arrays للاستجابة
+        $petData = $pet->toArray();
+        foreach ($jsonFields as $field) {
+            if ($pet->$field) {
+                $petData[$field] = json_decode($pet->$field, true);
+            } else {
+                $petData[$field] = [];
+            }
+        }
 
         return response()->json([
             'success' => true,
             'message' => 'تم إضافة الحيوان الأليف بنجاح!',
-            'pet' => $pet->load('user'),
-
+            'pet' => $petData,
         ], 201);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'فشل في إضافة الحيوان الأليف: ' . $e->getMessage()
+        ], 500);
     }
+}
     public function show($id)
     {
         $pet = Pet::with(['user', 'medicalRecords','user_subscriptionn'])->findOrFail($id);
@@ -64,8 +99,9 @@ class PetController extends Controller
             'data' => $pets
         ]);
     }
-    public function updatePet(Petupdate $request, $id)
-    {
+   public function updatePet(Petupdate $request, $id)
+{
+    try {
         $user = Auth::user();
 
         // البحث عن الحيوان والتحقق من ملكيته للمستخدم
@@ -78,17 +114,28 @@ class PetController extends Controller
             ], 404);
         }
 
-        // تحديث البيانات مع التحقق من الحقول المطلوبة
-        $data = $request->only([
-            'name',
-            'type',
-            'breed',
-            'name_cheap',
-            'birth_date',
-            'gender',
-            'health_status',
-            'status'
-        ]);
+        // الحصول على جميع البيانات المصرح بها
+        $data = $request->validated();
+
+        // معالجة الحقول المصفوفة (تحويلها إلى JSON)
+        $jsonFields = ['allergies', 'previous_surgeries', 'chronic_conditions', 'vaccination_history'];
+
+        foreach ($jsonFields as $field) {
+            if (isset($data[$field])) {
+                if (is_array($data[$field])) {
+                    // إذا تم إرسال مصفوفة جديدة، استبدال القديمة بها
+                    $data[$field] = !empty($data[$field]) ? json_encode($data[$field]) : null;
+                } else {
+                    // إذا لم يتم إرسالها أو تم إرسال قيمة غير صحيحة، احذفها من البيانات
+                    unset($data[$field]);
+                }
+            }
+        }
+
+        // تحويل القيم المنطقية
+        if (isset($data['is_spayed'])) {
+            $data['is_spayed'] = filter_var($data['is_spayed'], FILTER_VALIDATE_BOOLEAN);
+        }
 
         // معالجة صورة الحيوان الأليف
         if ($request->hasFile('image')) {
@@ -119,11 +166,31 @@ class PetController extends Controller
         // تنفيذ التحديث
         $pet->update($data);
 
+        // تحميل البيانات المحدثة مع العلاقات
+        $pet->refresh();
+
+        // تحويل الحقول JSON back إلى arrays للاستجابة
+        $petData = $pet->toArray();
+        foreach ($jsonFields as $field) {
+            if ($pet->$field) {
+                $petData[$field] = json_decode($pet->$field, true);
+            } else {
+                $petData[$field] = [];
+            }
+        }
+
         // إرجاع النتيجة مع بيانات محدثة
         return response()->json([
             'success' => true,
             'message' => 'تم تحديث معلومات الحيوان الأليف بنجاح',
-            'data' => $pet->fresh()
+            'data' => $petData
         ]);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'فشل في تحديث الحيوان الأليف: ' . $e->getMessage()
+        ], 500);
     }
+}
 }

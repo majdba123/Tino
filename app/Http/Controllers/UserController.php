@@ -15,134 +15,191 @@ class UserController extends Controller
     /**
      * جلب معلومات المستخدم الحالي
      */
-    public function getProfile(): JsonResponse
-    {
-        try {
-            $user = Auth::user();
+public function getProfile(): JsonResponse
+{
+    try {
+        $user = Auth::user();
 
-            if (!$user) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'المستخدم غير مسجل الدخول'
-                ], 401);
-            }
-
-            $response = [
-                'success' => true,
-                'data' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'phone' => $user->phone,
-                    'payment_methods' => $user->payment_methods,
-                    'type' => $user->type,
-                    'location' => [
-                        'lat' => $user->lat,
-                        'lang' => $user->lang
-                    ]
-                ]
-            ];
-
-            if ($user->image) {
-                $response['data']['image'] = Storage::url($user->image);
-            }
-
-            return response()->json($response);
-
-        } catch (\Exception $e) {
+        if (!$user) {
             return response()->json([
                 'success' => false,
-                'message' => 'فشل في جلب بيانات المستخدم: ' . $e->getMessage()
-            ], 500);
+                'message' => 'المستخدم غير مسجل الدخول'
+            ], 401);
         }
+
+        $response = [
+            'success' => true,
+            'data' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'phone' => $user->phone,
+                'payment_methods' => $user->payment_methods,
+                'type' => $user->type,
+                'location' => [
+                    'lat' => $user->lat,
+                    'lang' => $user->lang
+                ],
+                // البيانات الجديدة
+                'date_of_birth' => $user->date_of_birth,
+                'gender' => $user->gender,
+                'address_details' => [
+                    'country' => $user->country,
+                    'city' => $user->city,
+                    'street' => $user->street,
+                    'address' => $user->address,
+                    'apartment' => $user->apartment,
+                    'postal_code' => $user->postal_code,
+                ],
+                'emergency_contact' => [
+                    'name' => $user->emergency_contact_name,
+                    'phone' => $user->emergency_contact_phone,
+                    'email' => $user->emergency_contact_email
+                ],
+                'communication_preference' => $user->communication_preference,
+            ]
+        ];
+
+        if ($user->image) {
+            $response['data']['image'] = Storage::url($user->image);
+        }
+
+        return response()->json($response);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'فشل في جلب بيانات المستخدم: ' . $e->getMessage()
+        ], 500);
     }
+}
 
     /**
      * تحديث معلومات المستخدم
      */
-    public function updateProfile(Request $request): JsonResponse
-    {
-        try {
-            $user = Auth::user();
+public function updateProfile(Request $request): JsonResponse
+{
+    try {
+        $user = Auth::user();
 
-            if (!$user) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'المستخدم غير مسجل الدخول'
-                ], 401);
-            }
-
-            $validator = Validator::make($request->all(), [
-                'name' => 'sometimes|string|max:255',
-                'email' => 'sometimes|email|unique:users,email,'.$user->id,
-                'phone' => 'sometimes|string|max:20',
-                'lat' => 'sometimes|numeric',
-                'lang' => 'sometimes|numeric',
-                'password' => 'sometimes|string|min:8|confirmed',
-                'image' => 'sometimes|image|mimes:jpeg,png,jpg,gif|max:2048',
-                'payment_methods' =>  'sometimes|in:stripe,paypal'
-
-            ]);
-
-            if ($validator->fails()) {
-                return response()->json([
-                    'success' => false,
-                    'errors' => $validator->errors()
-                ], 422);
-            }
-
-            $data = $request->only(['name', 'email', 'phone', 'lat', 'lang','payment_methods']);
-
-            if ($request->has('password')) {
-                $data['password'] = bcrypt($request->password);
-            }
-
-            if ($request->hasFile('image')) {
-                // حذف الصورة القديمة إذا كانت موجودة
-                if ($user->image) {
-                    $oldImagePath = str_replace(url('api/storage/'), '', $user->image);
-                    if (Storage::disk('public')->exists($oldImagePath)) {
-                        Storage::disk('public')->delete($oldImagePath);
-                    }
-                }
-
-                // حفظ الصورة الجديدة بنفس الطريقة المستخدمة في دالة store
-                $imageFile = $request->file('image');
-                $imageName = Str::random(32).'.'.$imageFile->getClientOriginalExtension();
-                $imagePath = 'users/' . $imageName;
-                Storage::disk('public')->put($imagePath, file_get_contents($imageFile));
-
-                $data['image'] = url('api/storage/' . $imagePath);
-            }
-
-            $user->update($data);
-
-            $response = [
-                'success' => true,
-                'message' => 'تم تحديث البيانات بنجاح',
-                'data' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'phone' => $user->phone,
-                    'payment_methods' => $user->payment_methods,
-                    'location' => [
-                        'lat' => $user->lat,
-                        'lang' => $user->lang
-                    ],
-                    'image' => $user->image
-                ]
-            ];
-
-            return response()->json($response);
-
-        } catch (\Exception $e) {
+        if (!$user) {
             return response()->json([
                 'success' => false,
-                'message' => 'فشل في تحديث البيانات: ' . $e->getMessage()
-            ], 500);
+                'message' => 'المستخدم غير مسجل الدخول'
+            ], 401);
         }
+
+        $validator = Validator::make($request->all(), [
+            'name' => 'sometimes|string|max:255',
+            'email' => 'sometimes|email|unique:users,email,'.$user->id,
+            'phone' => 'sometimes|string|max:20',
+            'lat' => 'sometimes|numeric',
+            'lang' => 'sometimes|numeric',
+            'password' => 'sometimes|string|min:8|confirmed',
+            'image' => 'sometimes|image|mimes:jpeg,png,jpg,gif|max:2048',
+            'payment_methods' =>  'sometimes|in:stripe,paypal',
+
+            // الحقول الجديدة
+            'date_of_birth' => 'sometimes|date|before:today',
+            'gender' => 'sometimes|in:male,female,other',
+            'country' => 'sometimes|string|max:100',
+            'city' => 'sometimes|string|max:100',
+            'street' => 'sometimes|string|max:255',
+            'address' => 'sometimes|string|max:255',
+            'apartment' => 'sometimes|string|max:50',
+            'postal_code' => 'sometimes|string|max:20',
+            'emergency_contact_name' => 'sometimes|string|max:255',
+            'emergency_contact_phone' => 'sometimes|string|max:20',
+            'emergency_contact_email' => 'sometimes|email|max:255',
+            'communication_preference' => 'sometimes|in:email,notification,both',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $data = $request->only([
+            'name', 'email', 'phone', 'lat', 'lang', 'payment_methods',
+            // الحقول الجديدة
+            'date_of_birth', 'gender', 'country', 'city', 'street',
+            'address', 'apartment', 'suite', 'postal_code',
+            'emergency_contact_name', 'emergency_contact_phone',
+            'emergency_contact_email', 'communication_preference',
+            'contact_phone'
+        ]);
+
+        if ($request->has('password')) {
+            $data['password'] = bcrypt($request->password);
+        }
+
+        if ($request->hasFile('image')) {
+            // حذف الصورة القديمة إذا كانت موجودة
+            if ($user->image) {
+                $oldImagePath = str_replace(url('api/storage/'), '', $user->image);
+                if (Storage::disk('public')->exists($oldImagePath)) {
+                    Storage::disk('public')->delete($oldImagePath);
+                }
+            }
+
+            // حفظ الصورة الجديدة بنفس الطريقة المستخدمة في دالة store
+            $imageFile = $request->file('image');
+            $imageName = Str::random(32).'.'.$imageFile->getClientOriginalExtension();
+            $imagePath = 'users/' . $imageName;
+            Storage::disk('public')->put($imagePath, file_get_contents($imageFile));
+
+            $data['image'] = url('api/storage/' . $imagePath);
+        }
+
+        $user->update($data);
+
+        $response = [
+            'success' => true,
+            'message' => 'تم تحديث البيانات بنجاح',
+            'data' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'phone' => $user->phone,
+                'payment_methods' => $user->payment_methods,
+                'location' => [
+                    'lat' => $user->lat,
+                    'lang' => $user->lang
+                ],
+                'image' => $user->image,
+                // البيانات الجديدة
+                'date_of_birth' => $user->date_of_birth,
+                'gender' => $user->gender,
+                'address_details' => [
+                    'country' => $user->country,
+                    'city' => $user->city,
+                    'street' => $user->street,
+                    'address' => $user->address,
+                    'apartment' => $user->apartment,
+                    'suite' => $user->suite,
+                    'postal_code' => $user->postal_code,
+                ],
+                'emergency_contact' => [
+                    'name' => $user->emergency_contact_name,
+                    'phone' => $user->emergency_contact_phone,
+                    'email' => $user->emergency_contact_email
+                ],
+                'communication_preference' => $user->communication_preference,
+                'contact_phone' => $user->contact_phone
+            ]
+        ];
+
+        return response()->json($response);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'فشل في تحديث البيانات: ' . $e->getMessage()
+        ], 500);
     }
+}
 
     /**
      * جلب بيانات عيادة المستخدم
@@ -285,7 +342,7 @@ class UserController extends Controller
     /**
      * جلب جميع المستخدمين مع التقسيم والترتيب
      */
-    public function getAllUsers(Request $request): JsonResponse
+  public function getAllUsers(Request $request): JsonResponse
     {
         try {
             $query = User::query()->latest();
@@ -314,7 +371,31 @@ class UserController extends Controller
                     'name' => $user->name,
                     'email' => $user->email,
                     'phone' => $user->phone,
+                    'payment_methods' => $user->payment_methods,
                     'type' => $user->type,
+                    'location' => [
+                        'lat' => $user->lat,
+                        'lang' => $user->lang
+                    ],
+                    // البيانات الجديدة
+                    'date_of_birth' => $user->date_of_birth,
+                    'gender' => $user->gender,
+                    'address_details' => [
+                        'country' => $user->country,
+                        'city' => $user->city,
+                        'street' => $user->street,
+                        'address' => $user->address,
+                        'apartment' => $user->apartment,
+                        'suite' => $user->suite,
+                        'postal_code' => $user->postal_code,
+                    ],
+                    'emergency_contact' => [
+                        'name' => $user->emergency_contact_name,
+                        'phone' => $user->emergency_contact_phone,
+                        'email' => $user->emergency_contact_email
+                    ],
+                    'communication_preference' => $user->communication_preference,
+                    'contact_phone' => $user->contact_phone,
                     'image' => $user->image ? Storage::url($user->image) : null,
                     'created_at' => $user->created_at->format('Y-m-d H:i:s'),
                     'updated_at' => $user->updated_at->format('Y-m-d H:i:s')

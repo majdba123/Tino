@@ -16,7 +16,7 @@ return new class extends Migration
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
             $table->foreignId('pet_id')->constrained()->onDelete('cascade');
             $table->text('description');
-            $table->text('operation')->default('none');
+            $table->string('operation')->default('none');
             $table->text('admin_notes')->nullable();
             $table->string('status')->default('pending');
             $table->string('level_urgency');

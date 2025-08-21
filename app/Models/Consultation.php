@@ -48,4 +48,13 @@ class Consultation extends Model
         return $this->hasMany(Order_Clinic::class);
     }
 
+
+    public function completedOrderWithInvoice()
+    {
+        return $this->hasOne(Order_Clinic::class)
+                    ->where('status', 'complete')
+                    ->with(['pill'])
+                    ->latest(); // للحصول على أحدث طلب مكتمل
+    }
+
 }

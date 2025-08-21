@@ -35,15 +35,26 @@ class LoginController extends Controller
 
 
 
-public function login(LoginRequest $request): JsonResponse
+public function login(LoginRequest $request)
 {
-    $validatedData = $request->validated();
-    $loginData = $this->loginService->login($validatedData);
+    try {
+        $validatedData = $request->validated();
+        $loginData = $this->loginService->login($validatedData);
 
-    return response()->json([
-        'user' => $loginData['user'],
-        'access_token' => $loginData['access_token']
-    ]);
+        return response()->json([
+            'success' => true,
+            'user' => $loginData['user'],
+            'access_token' => $loginData['access_token']
+        ]);
+
+    } catch (\Exception $e) {
+        $statusCode = $e->getCode() ?: 500;
+
+        return response()->json([
+            'success' => false,
+            'message' => $e->getMessage()
+        ], $statusCode);
+    }
 }
 
 

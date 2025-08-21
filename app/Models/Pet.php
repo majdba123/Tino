@@ -19,12 +19,32 @@ class Pet extends Model
         'breed',
         'health_status',
         'status',
-        'user_id'
+        'user_id',
+        // الحقول الجديدة
+        'color',
+        'weight',
+        'is_spayed',
+        'allergies',
+        'previous_surgeries',
+        'chronic_conditions',
+        'vaccination_history',
+        'last_veterinary_visit',
+        'current_veterinary',
+        'insurance_company',
+        'policy_number',
+        'coverage_details'
     ];
 
     protected $casts = [
         'birth_date' => 'date',
+        'last_veterinary_visit' => 'date',
+        'is_spayed' => 'boolean',
+        'allergies' => 'array',
+        'previous_surgeries' => 'array',
+        'chronic_conditions' => 'array',
+        'vaccination_history' => 'array',
     ];
+
 
     public function user()
     {
@@ -58,6 +78,27 @@ class Pet extends Model
     public function user_subscriptionn()
     {
         return $this->hasOne(User_Subscription::class, 'pet_id')->where('is_active', true);
+    }
+
+
+      public function getAllergiesAttribute($value)
+    {
+        return $value ? json_decode($value, true) : [];
+    }
+
+    public function getPreviousSurgeriesAttribute($value)
+    {
+        return $value ? json_decode($value, true) : [];
+    }
+
+    public function getChronicConditionsAttribute($value)
+    {
+        return $value ? json_decode($value, true) : [];
+    }
+
+    public function getVaccinationHistoryAttribute($value)
+    {
+        return $value ? json_decode($value, true) : [];
     }
 
 }

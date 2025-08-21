@@ -83,7 +83,7 @@ class ConsultationController extends Controller
     {
         $perPage = $request->input('per_page', 10); // 10 عناصر في الصفحة افتراضياً
 
-        $query = Consultation::with(['pet.user_subscriptionn', 'anwer_cons'])
+        $query = Consultation::with(['pet.user_subscriptionn', 'anwer_cons','completedOrdersWithInvoice'])
             ->latest();
 
         if (Auth::user()->type !== 'admin' && Auth::user()->type !== '2') {
@@ -126,7 +126,7 @@ class ConsultationController extends Controller
      */
     public function show($id)
     {
-        $consultation = Consultation::with('pet.user_subscriptionn')->find($id);
+        $consultation = Consultation::with('pet.user_subscriptionn','completedOrdersWithInvoice')->find($id);
 
         if (!$consultation) {
             return response()->json([

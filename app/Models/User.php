@@ -31,7 +31,19 @@ class User extends Authenticatable implements MustVerifyEmail
         'password',
         'email_verified_at',
         'stripe_customer_id',
-        'stripe_payment_method_id'
+        'stripe_payment_method_id',
+            'date_of_birth',
+            'gender',
+            'country',
+            'city',
+            'street',
+            'address',
+            'apartment',
+            'postal_code',
+            'emergency_contact_name',
+            'emergency_contact_phone',
+            'emergency_contact_email',
+            'communication_preference',
 
     ];
 

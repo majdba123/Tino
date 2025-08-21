@@ -3,6 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Pill;
+use App\Models\Consultation;
+use Illuminate\Support\Facades\Auth;
+
 use Illuminate\Http\Request;
 use Barryvdh\DomPDF\Facade\Pdf;  // Note: 'Pdf' (capital P) is the class name
 class PillController extends Controller
@@ -109,40 +112,91 @@ public function index(Request $request)
             ->header('Content-Type', 'application/pdf')
             ->header('Content-Disposition', 'inline; filename="pill-details-'.$pill->id.'.pdf"');
     }
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request)
+
+
+
+
+    public function index_user()
     {
-        //
+        try {
+            $user = Auth::user();
+
+            // جلب جميع استشارات المستخدم مع العلاقات اللازمة
+            $consultations = Consultation::with([
+                'pet',
+                'Order_Clinic.pill'
+            ])->where('user_id', $user->id)->get();
+
+            $invoices = [];
+
+            foreach ($consultations as $consultation) {
+                // التحقق من وجود أوامر للعيادة مرتبطة بالاستشارة
+                if ($consultation->Order_Clinic->count() > 0) {
+                    foreach ($consultation->Order_Clinic as $order) {
+                        // إذا كان هناك فاتورة مرتبطة بالطلب
+                        if ($order->pill) {
+                            $invoices[] = [
+                                'consultation_id' => $consultation->id,
+                                'consultation_description' => $consultation->description,
+                                'consultation_status' => $consultation->status,
+                                'pet_name' => $consultation->pet->name,
+                                'order_id' => $order->id,
+                                'order_status' => $order->status,
+                                'invoice' => $order->pill->getInvoiceData()
+                            ];
+                        }
+                    }
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => $invoices,
+                'message' => 'تم جلب الفواتير بنجاح'
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
-     * Display the specified resource.
+     * عرض فاتورة محددة
      */
-
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(Pill $pill)
+    public function show_user($invoiceId)
     {
-        //
+        try {
+            $user = Auth::user();
+
+            // البحث عن الفاتورة مع التحقق من ملكية المستخدم لها
+            $pill = Pill::whereHas('orderClinic.consultation', function($query) use ($user) {
+                $query->where('user_id', $user->id);
+            })->findOrFail($invoiceId);
+
+            return response()->json([
+                'success' => true,
+                'data' => $pill->getInvoiceData(),
+                'message' => 'تم جلب الفاتورة بنجاح'
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'لم يتم العثور على الفاتورة أو لا تملك صلاحية الوصول'
+            ], 404);
+        }
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, Pill $pill)
-    {
-        //
-    }
 
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(Pill $pill)
-    {
-        //
-    }
+
+
+
+
+
+
+
+
 }
